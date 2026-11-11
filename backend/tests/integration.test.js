@@ -147,7 +147,7 @@ async function show(agent, path) {
 }
 
 test("Schema sample records and application health are real and valid", async () => {
-  assert.equal(await count("venues"), 3);
+  assert.equal(await count("venues"), 8);
   assert.equal(await count("event_tasks"), 5);
   const r = await request(server).get("/health");
   assert.deepEqual(r.body, { status: "ok", database_checked: false });
@@ -155,7 +155,7 @@ test("Schema sample records and application health are real and valid", async ()
 test("Correct administrator login grants dashboard access", async () => {
   const a = request.agent(server);
   await login(a);
-  assert.match(await show(a, "/dashboard"), /Administrator dashboard/);
+  assert.match(await show(a, "/dashboard"), /Administrator Console/);
 });
 test("Wrong login leaves no authenticated session", async () => {
   const a = request.agent(server);
@@ -179,12 +179,12 @@ test("Student ID authentication works", async () => {
     ).status,
     302,
   );
-  assert.match(await show(a, "/dashboard"), /Student dashboard/);
+  assert.match(await show(a, "/dashboard"), /Campus Hub Live/);
 });
 test("Student cannot access administrator pages or create events", async () => {
   const a = request.agent(server);
   await login(a, "student");
-  for (const path of ["/venues", "/events/new", "/reports"])
+  for (const path of ["/venues", "/events/new", "/reports", "/users", "/simulator", "/runs"])
     assert.equal((await a.get(path)).status, 403);
 });
 test("Logout destroys the server-side session and access", async () => {
@@ -618,7 +618,7 @@ test("Students cannot view or list another user’s saved runs", async () => {
     a = request.agent(server);
   await login(a, "student");
   assert.equal((await a.get("/runs/" + rid)).status, 403);
-  assert.doesNotMatch(await show(a, "/runs"), new RegExp(rid));
+  assert.equal((await a.get("/runs")).status, 403);
 });
 test("Reports allow only known queries and enforce administrator access", async () => {
   const a = request.agent(server);
@@ -717,18 +717,18 @@ test("Full workflow: admin event, student registration, simulation save, reports
     .type("form")
     .send({ csrf_token: st });
   assert.match(await show(student, "/registrations"), /Test event/);
-  const r = await student
+  const r = await a
     .post("/simulator")
     .type("form")
-    .send({ csrf_token: st, processes: "A,Report,3,2\nB,Attendance,10,1" });
+    .send({ csrf_token: token, processes: "A,Report,3,2\nB,Attendance,10,1" });
   assert.match(r.text, /IDLE/);
   const signed = r.text.match(/name="input_token" value="([^"]+)"/)[1];
-  const saved = await student
+  const saved = await a
     .post("/simulator/save")
     .type("form")
-    .send({ csrf_token: st, input_token: signed });
+    .send({ csrf_token: token, input_token: signed });
   assert.equal(saved.status, 302);
-  assert.match(await show(student, saved.headers.location), /Saved FCFS run/);
+  assert.match(await show(a, saved.headers.location), /Saved FCFS run/);
   assert.match(await show(a, "/reports"), /Test event/);
   await a.post(`/events/${id}/delete`).type("form").send({ csrf_token: token });
   assert.equal(await count("registrations"), 0);

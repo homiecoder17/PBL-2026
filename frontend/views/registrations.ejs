@@ -1,0 +1,59 @@
+<%- include('partials/header',{title:'My registrations',active:'registrations'}) %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">STUDENT SCHEDULE</p>
+    <h1>My registrations<span class="heading-period">.</span></h1>
+    <p class="muted">Confirmed seats, automatic waitlist positions, and attendance check-in status.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/events">Browse all events</a>
+</div>
+
+<% if (registrations.length) { %>
+  <div class="event-grid">
+    <% for (const r of registrations) { %>
+      <article class="panel event-card">
+        <span class="event-card-symbol"><%- include('partials/icon',{name:'check'}) %></span>
+        <div class="section-heading">
+          <p class="eyebrow"><%= displayDate(r.event_date) %></p>
+          <% if (r.registration_status === 'waitlisted') { %>
+            <span class="status status-amber">Waitlisted</span>
+          <% } else if (r.checked_in) { %>
+            <span class="status status-green">Checked in</span>
+          <% } else { %>
+            <span class="status <%= r.status === 'scheduled' ? 'status-green' : 'status-gray' %>">
+              <%= r.status === 'scheduled' ? 'Confirmed' : r.status %>
+            </span>
+          <% } %>
+        </div>
+        <h2><%= r.title %></h2>
+        <p class="description"><%= r.description %></p>
+        <dl class="event-details">
+          <div><dt>Venue</dt><dd><%= r.venue_name %></dd></div>
+          <div><dt>Time</dt><dd><%= clock(r.start_time) %>–<%= clock(r.end_time) %></dd></div>
+          <div><dt>Organizer</dt><dd><%= r.organizer %></dd></div>
+          <div><dt>Registered at</dt><dd><%= String(r.registration_date).slice(0, 19).replace('T', ' ') %></dd></div>
+        </dl>
+        <div class="card-actions">
+          <% if (r.registration_open && r.status !== 'cancelled') { %>
+            <form method="post" action="/events/<%= r.event_id %>/unregister" data-confirm="Cancel your registration for this event?">
+              <input type="hidden" name="csrf_token" value="<%= csrf %>">
+              <input type="hidden" name="return_to" value="/registrations">
+              <button class="btn btn-outline-danger"><%= r.registration_status === 'waitlisted' ? 'Leave waitlist' : 'Cancel registration' %></button>
+            </form>
+          <% } else if (r.status === 'cancelled') { %>
+            <span class="status status-gray">Event cancelled</span>
+          <% } else { %>
+            <span class="status status-gray">Event started</span>
+          <% } %>
+        </div>
+      </article>
+    <% } %>
+  </div>
+<% } else { %>
+  <section class="panel empty-state">
+    <h2>No registrations yet.</h2>
+    <p class="muted mb-3">Explore upcoming campus events and reserve your seat before capacity fills up.</p>
+    <a class="btn btn-primary" href="/events">Browse campus events</a>
+  </section>
+<% } %>
+<%- include('partials/footer') %>

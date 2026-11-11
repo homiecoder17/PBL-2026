@@ -1,3 +1,81 @@
 <%- include('partials/header',{title:'DBMS queries',active:'reports'}) %>
-<div class="page-heading"><div><p class="eyebrow">DATABASE MANAGEMENT SYSTEMS (DBMS)</p><h1>Relational database queries<span class="heading-period">.</span></h1><p class="muted">Live SQL queries executed against MySQL relational tables with joins, constraints, and aggregations.</p></div></div><form method="get" class="panel report-selector"><label for="query" class="form-label">Select SQL query</label><div class="report-select-row"><select name="query" id="query" class="form-select"><% for(const [key,info] of Object.entries(reports)){ %><option value="<%= key %>" <%= key===selected?'selected':'' %>><%= info.title %></option><% } %></select><button class="btn btn-primary">Run query</button></div></form><section class="panel"><h2><%= report.title %></h2><pre class="sql-block"><code><%= report.sql %></code></pre><p class="table-scroll-hint">Scroll horizontally to view all columns.</p><div class="table-responsive" tabindex="0" role="region" aria-label="Scrollable data table"><table class="table"><caption><%= rows.length %> record(s) returned from database.</caption><% if(rows.length){ %><thead><tr><% for(const column of columns){ %><th scope="col"><%= column.replaceAll('_',' ') %></th><% } %></tr></thead><tbody><% for(const row of rows){ %><tr><% for(const column of columns){ %><td><%= row[column] %></td><% } %></tr><% } %></tbody><% } else { %><tbody><tr><td class="empty-state">No records returned.</td></tr></tbody><% } %></table></div></section>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">DATABASE MANAGEMENT SYSTEMS (DBMS)</p>
+    <h1>Relational database queries<span class="heading-period">.</span></h1>
+    <p class="muted">Live allowlisted SQL queries with JOINs, constraints, aggregations, and optional database query execution plans.</p>
+  </div>
+</div>
+
+<form method="get" class="panel report-selector">
+  <label for="query" class="form-label">Select SQL query</label>
+  <div class="report-select-row">
+    <select name="query" id="query" class="form-select">
+      <% for (const [key, info] of Object.entries(reports)) { %>
+        <option value="<%= key %>" <%= key === selected ? 'selected' : '' %>><%= info.title %></option>
+      <% } %>
+    </select>
+    <button class="btn btn-primary">Run query</button>
+  </div>
+  <div class="form-check mt-3">
+    <input class="form-check-input" type="checkbox" id="explain" name="explain" value="1" <%= explain ? 'checked' : '' %>>
+    <label class="form-check-label small-note" for="explain">Include SQL <code><%= dbFallback ? 'EXPLAIN QUERY PLAN' : 'EXPLAIN' %></code> execution analysis</label>
+  </div>
+</form>
+
+<section class="panel">
+  <h2><%= report.title %></h2>
+  <pre class="sql-block"><code><%= report.sql %></code></pre>
+
+  <% if (explain && explainRows.length) { %>
+    <h3 class="mt-4 mb-2">Query execution plan (<code><%= dbFallback ? 'SQLite EXPLAIN QUERY PLAN' : 'MySQL EXPLAIN' %></code>)</h3>
+    <div class="table-responsive mb-4" tabindex="0" role="region" aria-label="Query execution plan table">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <% for (const col of explainColumns) { %>
+              <th scope="col"><%= col %></th>
+            <% } %>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const er of explainRows) { %>
+            <tr>
+              <% for (const col of explainColumns) { %>
+                <td><%= er[col] %></td>
+              <% } %>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+
+  <p class="table-scroll-hint">Scroll horizontally to view all columns.</p>
+  <div class="table-responsive" tabindex="0" role="region" aria-label="Scrollable data table">
+    <table class="table">
+      <caption><%= rows.length %> record(s) returned from database.</caption>
+      <% if (rows.length) { %>
+        <thead>
+          <tr>
+            <% for (const column of columns) { %>
+              <th scope="col"><%= column.replaceAll('_', ' ') %></th>
+            <% } %>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const row of rows) { %>
+            <tr>
+              <% for (const column of columns) { %>
+                <td><%= row[column] %></td>
+              <% } %>
+            </tr>
+          <% } %>
+        </tbody>
+      <% } else { %>
+        <tbody><tr><td class="empty-state">No records returned.</td></tr></tbody>
+      <% } %>
+    </table>
+  </div>
+</section>
 <%- include('partials/footer') %>

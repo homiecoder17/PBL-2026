@@ -1,0 +1,15 @@
+<%- include('partials/header',{title:`Saved ${run.algorithm} run`,active:'runs'}) %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">IMMUTABLE SIMULATION SNAPSHOT</p>
+    <h1>Saved <%= run.algorithm %> run<span class="heading-period">.</span></h1>
+    <p class="muted run-id">Run UUID: <code><%= run.run_id %></code> · Saved by <strong><%= run.owner_name %></strong> on <%= String(run.created_at).slice(0, 19).replace('T', ' ') %></p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary" href="/runs">All saved runs</a>
+    <a class="btn btn-primary" href="/simulator">New simulation</a>
+  </div>
+</div>
+
+<%- include('partials/result', { result, signedTokens: null, source: undefined }) %>
+<%- include('partials/footer') %>

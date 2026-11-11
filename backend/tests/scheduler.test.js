@@ -114,8 +114,10 @@ test("CSV names containing commas round-trip correctly", () => {
   ];
   assert.deepEqual(parseProcesses(serializeTasks(t)), t);
 });
-test("Invalid algorithm and boolean arrival rejected", () => {
-  assert.throws(() => schedule(tasks, "RR"));
+test("Invalid algorithm, bad quantum, and boolean arrival rejected", () => {
+  assert.throws(() => schedule(tasks, "INVALID"));
+  assert.throws(() => schedule(tasks, "RR", { quantum: 0 }));
+  assert.throws(() => schedule(tasks, "RR", { quantum: 1.5 }));
   assert.throws(() =>
     schedule(
       [{ process_id: "A", task_name: "A", arrival_time: true, burst_time: 1 }],
@@ -151,7 +153,7 @@ test("Signed scheduling input rejects tampering, wrong user, expiry, and future 
     ),
   );
 });
-test("300 deterministic workloads satisfy non-overlap and CT/WT/TAT identities", () => {
+test("300 deterministic workloads satisfy invariants across all 5 algorithms", () => {
   let seed = 42;
   const next = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -163,24 +165,88 @@ test("300 deterministic workloads satisfy non-overlap and CT/WT/TAT identities",
       task_name: "Task",
       arrival_time: next() % 40,
       burst_time: 1 + (next() % 15),
+      priority: next() % 10,
     }));
-    for (const alg of ["FCFS", "SJF"]) {
-      const r = schedule(t, alg);
+    for (const alg of ["FCFS", "SJF", "SRTF", "PRIORITY", "RR"]) {
+      const r = schedule(t, alg, { quantum: 1 + (run % 4) });
       assert.equal(r.rows.length, t.length);
       let finish = 0;
+      const busyByPid = new Map();
       for (const s of r.segments) {
         assert.equal(s.start, finish);
         assert.ok(s.finish > s.start);
+        if (s.process_id !== "IDLE") {
+          busyByPid.set(
+            s.process_id,
+            (busyByPid.get(s.process_id) || 0) + (s.finish - s.start),
+          );
+        }
         finish = s.finish;
       }
       for (const row of r.rows) {
-        assert.equal(row.finish_time, row.start_time + row.burst_time);
+        assert.equal(busyByPid.get(row.process_id), row.burst_time);
+        assert.ok(row.start_time >= row.arrival_time);
+        assert.ok(row.finish_time >= row.start_time + row.burst_time);
         assert.equal(row.turnaround_time, row.finish_time - row.arrival_time);
         assert.equal(row.waiting_time, row.turnaround_time - row.burst_time);
+        assert.equal(row.response_time, row.start_time - row.arrival_time);
         assert.ok(row.waiting_time >= 0);
       }
     }
   }
+});
+
+test("SRTF preempts longer running process and achieves optimal waiting time", () => {
+  const r = schedule(tasks, "SRTF");
+  assert.deepEqual(
+    r.segments.map((s) => [s.process_id, s.start, s.finish]),
+    [
+      ["P1", 0, 2],
+      ["P2", 2, 4],
+      ["P3", 4, 5],
+      ["P2", 5, 7],
+      ["P4", 7, 11],
+      ["P1", 11, 16],
+    ],
+  );
+  assert.equal(r.average_waiting_time, 3);
+  assert.equal(r.average_turnaround_time, 7);
+});
+
+test("Priority scheduling honors lower-number priority and round-trips 5-column CSV", () => {
+  const csv = "P1,Bulk,0,5,3\nP2,Urgent,1,2,1\nP3,Medium,1,2,2";
+  const parsed = parseProcesses(csv);
+  assert.deepEqual(parseProcesses(serializeTasks(parsed)), parsed);
+  const r = schedule(parsed, "PRIORITY");
+  assert.deepEqual(
+    r.segments.map((s) => s.process_id),
+    ["P1", "P2", "P3"],
+  );
+});
+
+test("Round Robin schedules time slices in FIFO ready order with idle gaps", () => {
+  const rrTasks = parseProcesses("P1,A,0,5\nP2,B,1,3\nP3,C,2,1");
+  const r = schedule(rrTasks, "RR", { quantum: 2 });
+  assert.equal(r.quantum, 2);
+  assert.deepEqual(
+    r.segments.map((s) => [s.process_id, s.start, s.finish]),
+    [
+      ["P1", 0, 2],
+      ["P2", 2, 4],
+      ["P3", 4, 5],
+      ["P1", 5, 7],
+      ["P2", 7, 8],
+      ["P1", 8, 9],
+    ],
+  );
+  assert.deepEqual(
+    r.rows.map((x) => [x.process_id, x.finish_time, x.waiting_time, x.response_time]),
+    [
+      ["P1", 9, 4, 0],
+      ["P2", 8, 4, 1],
+      ["P3", 5, 2, 2],
+    ],
+  );
 });
 test("Event start time to arrival and student count to burst time conversion", () => {
   assert.equal(timeToArrival("09:00"), 0);

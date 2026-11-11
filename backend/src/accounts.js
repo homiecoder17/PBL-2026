@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { execute } from "./db.js";
-import { text } from "./services.js";
-import { hashPassword, validatePassword } from "./passwords.js";
+import { text, UserError } from "./services.js";
+import { hashPassword, validatePassword, verifyPassword } from "./passwords.js";
 import { campusNow } from "./format.js";
 export async function createUser(
   db,
@@ -9,22 +9,26 @@ export async function createUser(
 ) {
   name = text(name, "Name", 100);
   email = text(email, "Email", 254).toLowerCase();
-  validatePassword(password);
+  studentId =
+    typeof studentId === "string" && studentId.trim() ? studentId.trim() : null;
+  try {
+    validatePassword(password);
+  } catch (err) {
+    throw new UserError(err.message);
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    throw new Error("Enter a valid email.");
+    throw new UserError("Enter a valid email.");
   if (!["admin", "student"].includes(role))
-    throw new Error("Role must be admin or student.");
+    throw new UserError("Role must be admin or student.");
   if (studentId && !/^[A-Za-z0-9_-]{1,32}$/.test(studentId))
-    throw new Error("Invalid student ID.");
-  if (
-    (
-      await db.query(
+    throw new UserError("Invalid student ID.");
+  const dup = studentId
+    ? await db.query(
         "SELECT user_id FROM users WHERE email=? OR student_id=?",
         [email, studentId],
       )
-    ).length
-  )
-    throw new Error("Email or student ID already exists.");
+    : await db.query("SELECT user_id FROM users WHERE email=?", [email]);
+  if (dup.length) throw new UserError("Email or student ID already exists.");
   const hash = await hashPassword(password);
   return db.transaction(
     async (conn) =>
@@ -176,4 +180,31 @@ export async function demoSql(db) {
     output.push("ROLLBACK: no venue records left behind (ID gaps are normal).");
   }
   return output;
+}
+
+export async function changePassword(
+  db,
+  userId,
+  currentPassword,
+  newPassword,
+) {
+  const row = (
+    await db.query("SELECT user_id, password_hash FROM users WHERE user_id=?", [
+      userId,
+    ])
+  )[0];
+  if (!row) throw new UserError("Account not found.");
+  if (!(await verifyPassword(row.password_hash, currentPassword || ""))) {
+    throw new UserError("Current password is incorrect.");
+  }
+  try {
+    validatePassword(newPassword);
+  } catch (err) {
+    throw new UserError(err.message);
+  }
+  const nextHash = await hashPassword(newPassword);
+  await db.query("UPDATE users SET password_hash=? WHERE user_id=?", [
+    nextHash,
+    userId,
+  ]);
 }

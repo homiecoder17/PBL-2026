@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS events (
   expected_attendance INT NOT NULL,
   venue_id INT UNSIGNED NOT NULL,
   created_by INT UNSIGNED NOT NULL,
-  status ENUM('scheduled','cancelled') NOT NULL DEFAULT 'scheduled',
+  status ENUM('scheduled','pending_schedule','cancelled') NOT NULL DEFAULT 'scheduled',
   CONSTRAINT fk_event_venue FOREIGN KEY (venue_id) REFERENCES venues(venue_id) ON DELETE RESTRICT,
   CONSTRAINT fk_event_creator FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE RESTRICT,
   CONSTRAINT chk_event_attendance CHECK (expected_attendance > 0),
@@ -42,11 +42,15 @@ CREATE TABLE IF NOT EXISTS registrations (
   registration_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id INT UNSIGNED NOT NULL,
   event_id INT UNSIGNED NOT NULL,
+  status ENUM('confirmed','waitlisted') NOT NULL DEFAULT 'confirmed',
+  checked_in TINYINT(1) NOT NULL DEFAULT 0,
+  checked_in_at TIMESTAMP NULL DEFAULT NULL,
   registration_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT uq_student_event UNIQUE (user_id,event_id),
   CONSTRAINT fk_registration_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE RESTRICT,
   CONSTRAINT fk_registration_event FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
-  INDEX idx_registration_event (event_id)
+  INDEX idx_registration_event (event_id),
+  INDEX idx_registration_status (event_id,status,registration_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS event_tasks (
@@ -63,7 +67,9 @@ CREATE TABLE IF NOT EXISTS event_tasks (
 
 CREATE TABLE IF NOT EXISTS scheduling_runs (
   run_id CHAR(36) PRIMARY KEY,
-  algorithm ENUM('FCFS','SJF') NOT NULL,
+  algorithm ENUM('FCFS','SJF','SRTF','PRIORITY','RR') NOT NULL,
+  quantum INT NULL DEFAULT NULL,
+  timeline_json MEDIUMTEXT NULL,
   created_by INT UNSIGNED NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   task_count INT NOT NULL,
@@ -71,6 +77,7 @@ CREATE TABLE IF NOT EXISTS scheduling_runs (
   average_turnaround_time DECIMAL(14,4) NOT NULL,
   CONSTRAINT uq_run_algorithm UNIQUE (run_id,algorithm),
   CONSTRAINT fk_run_user FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE RESTRICT,
+  CONSTRAINT chk_run_quantum CHECK (quantum IS NULL OR quantum > 0),
   CONSTRAINT chk_run_count CHECK (task_count > 0),
   CONSTRAINT chk_run_averages CHECK (average_waiting_time >= 0 AND average_turnaround_time > 0)
 ) ENGINE=InnoDB;
@@ -79,11 +86,12 @@ CREATE TABLE IF NOT EXISTS scheduling_results (
   result_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   run_id CHAR(36) NOT NULL,
   task_id INT UNSIGNED NOT NULL,
-  algorithm ENUM('FCFS','SJF') NOT NULL,
+  algorithm ENUM('FCFS','SJF','SRTF','PRIORITY','RR') NOT NULL,
   process_id VARCHAR(32) NOT NULL,
   task_name VARCHAR(100) NOT NULL,
   arrival_time INT NOT NULL,
   burst_time INT NOT NULL,
+  priority INT NOT NULL DEFAULT 0,
   start_time INT NOT NULL,
   finish_time INT NOT NULL,
   waiting_time INT NOT NULL,
@@ -93,9 +101,10 @@ CREATE TABLE IF NOT EXISTS scheduling_results (
   CONSTRAINT fk_result_task FOREIGN KEY (task_id) REFERENCES event_tasks(task_id) ON DELETE RESTRICT,
   CONSTRAINT chk_result_math CHECK (
     arrival_time >= 0 AND burst_time > 0 AND start_time >= arrival_time
-    AND finish_time = start_time + burst_time
+    AND finish_time >= start_time + burst_time
     AND turnaround_time = finish_time - arrival_time
-    AND waiting_time = start_time - arrival_time
+    AND waiting_time = turnaround_time - burst_time
+    AND waiting_time >= 0
   )
 ) ENGINE=InnoDB;
 

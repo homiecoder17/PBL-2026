@@ -1,0 +1,51 @@
+<%- include('partials/header',{title:'Account security',active:'account'}) %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">PROFILE &amp; SECURITY</p>
+    <h1>Your account<span class="heading-period">.</span></h1>
+    <p class="muted">View your campus profile details and keep your account password up to date.</p>
+  </div>
+</div>
+
+<div class="simulator-input-grid">
+  <section class="panel">
+    <p class="eyebrow">IDENTITY DETAILS</p>
+    <h2><%= user.name %></h2>
+    <dl class="event-details">
+      <div><dt>Email</dt><dd><%= user.email %></dd></div>
+      <div><dt>Role</dt><dd><span class="status status-green"><%= user.role === 'admin' ? 'Administrator' : 'Student' %></span></dd></div>
+      <div><dt>Student ID</dt><dd><%= user.student_id || 'N/A' %></dd></div>
+    </dl>
+    <div class="notice">
+      Choose a strong password of at least 12 characters that you do not reuse on other websites.
+    </div>
+  </section>
+
+  <form method="post" action="/account/password" class="panel form-panel">
+    <input type="hidden" name="csrf_token" value="<%= csrf %>">
+    <h2>Change password</h2>
+    <div class="mb-3">
+      <label class="form-label" for="current_password">Current password</label>
+      <div class="password-field">
+        <input class="form-control" id="current_password" name="current_password" type="password" required maxlength="256" autocomplete="current-password">
+        <button type="button" class="password-toggle" hidden data-enhance aria-label="Show password" aria-pressed="false"><%- include('partials/icon',{name:'eye'}) %></button>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="new_password">New password (12–256 chars)</label>
+      <div class="password-field">
+        <input class="form-control" id="new_password" name="new_password" type="password" required minlength="12" maxlength="256" autocomplete="new-password">
+        <button type="button" class="password-toggle" hidden data-enhance aria-label="Show password" aria-pressed="false"><%- include('partials/icon',{name:'eye'}) %></button>
+      </div>
+    </div>
+    <div class="mb-4">
+      <label class="form-label" for="confirm_password">Confirm new password</label>
+      <div class="password-field">
+        <input class="form-control" id="confirm_password" name="confirm_password" type="password" required minlength="12" maxlength="256" autocomplete="new-password">
+        <button type="button" class="password-toggle" hidden data-enhance aria-label="Show password" aria-pressed="false"><%- include('partials/icon',{name:'eye'}) %></button>
+      </div>
+    </div>
+    <button class="btn btn-primary w-100">Update password</button>
+  </form>
+</div>
+<%- include('partials/footer') %>

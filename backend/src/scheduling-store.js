@@ -1,17 +1,27 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { execute } from "./db.js";
-import { schedule, validateTasks } from "./scheduler.js";
-export function signInput(tasks, algorithm, userId, secret, now = Date.now()) {
+import { DEFAULT_QUANTUM, schedule, validateTasks } from "./scheduler.js";
+
+export function signInput(
+  tasks,
+  algorithm,
+  userId,
+  secret,
+  now = Date.now(),
+  options = {},
+) {
   validateTasks(tasks);
-  schedule(tasks, algorithm);
+  schedule(tasks, algorithm, options);
+  const quantum = algorithm === "RR" ? (options.quantum ?? DEFAULT_QUANTUM) : null;
   const data = Buffer.from(
-    JSON.stringify({ tasks, algorithm, userId, issuedAt: now }),
+    JSON.stringify({ tasks, algorithm, quantum, userId, issuedAt: now }),
   ).toString("base64url");
   const signature = createHmac("sha256", secret)
     .update("cpu-input-v1." + data)
     .digest("base64url");
   return data + "." + signature;
 }
+
 export function readInput(token, userId, secret, now = Date.now()) {
   if (typeof token !== "string" || token.length > 20000)
     throw new Error("Invalid scheduling input.");
@@ -39,17 +49,21 @@ export function readInput(token, userId, secret, now = Date.now()) {
   validateTasks(data.tasks);
   return data;
 }
+
 export async function saveSignedRun(db, token, userId, secret) {
   const input = readInput(token, userId, secret),
-    result = schedule(input.tasks, input.algorithm),
+    quantum = input.algorithm === "RR" ? (input.quantum ?? DEFAULT_QUANTUM) : null,
+    result = schedule(input.tasks, input.algorithm, { quantum }),
     runId = randomUUID();
   await db.transaction(async (conn) => {
     await execute(
       conn,
-      `INSERT INTO scheduling_runs (run_id,algorithm,created_by,task_count,average_waiting_time,average_turnaround_time) VALUES (?,?,?,?,?,?)`,
+      `INSERT INTO scheduling_runs (run_id,algorithm,quantum,timeline_json,created_by,task_count,average_waiting_time,average_turnaround_time) VALUES (?,?,?,?,?,?,?,?)`,
       [
         runId,
         result.algorithm,
+        quantum,
+        JSON.stringify(result.segments),
         userId,
         result.rows.length,
         result.average_waiting_time,
@@ -57,14 +71,15 @@ export async function saveSignedRun(db, token, userId, secret) {
       ],
     );
     for (const row of result.rows) {
+      const priority = row.priority ?? 0;
       const task = await execute(
         conn,
-        "INSERT INTO event_tasks (process_id,task_name,arrival_time,burst_time,priority,status) VALUES (?,?,?,?,0,'simulated')",
-        [row.process_id, row.task_name, row.arrival_time, row.burst_time],
+        "INSERT INTO event_tasks (process_id,task_name,arrival_time,burst_time,priority,status) VALUES (?,?,?,?,?,'simulated')",
+        [row.process_id, row.task_name, row.arrival_time, row.burst_time, priority],
       );
       await execute(
         conn,
-        `INSERT INTO scheduling_results (run_id,task_id,algorithm,process_id,task_name,arrival_time,burst_time,start_time,finish_time,waiting_time,turnaround_time) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO scheduling_results (run_id,task_id,algorithm,process_id,task_name,arrival_time,burst_time,priority,start_time,finish_time,waiting_time,turnaround_time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           runId,
           task.insertId,
@@ -73,6 +88,7 @@ export async function saveSignedRun(db, token, userId, secret) {
           row.task_name,
           row.arrival_time,
           row.burst_time,
+          priority,
           row.start_time,
           row.finish_time,
           row.waiting_time,

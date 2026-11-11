@@ -53,6 +53,7 @@ export function roleRequired(role) {
   ];
 }
 export function flash(req, type, text) {
+  req.session.messages ||= [];
   req.session.messages.push({ type, text });
 }
 export function regenerate(req) {

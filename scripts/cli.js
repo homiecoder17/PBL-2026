@@ -1,9 +1,9 @@
-import { hiddenPassword } from "../src/terminal.js";
+import { hiddenPassword } from "../backend/src/terminal.js";
 import { parseArgs } from "node:util";
-import { loadConfig } from "../src/config.js";
-import { createDatabase } from "../src/db.js";
-import { createServices } from "../src/services.js";
-import { createUser, seedDemo, seedEvents, demoSql } from "../src/accounts.js";
+import { loadConfig } from "../backend/src/config.js";
+import { createDatabase } from "../backend/src/db.js";
+import { createServices } from "../backend/src/services.js";
+import { createUser, seedDemo, seedEvents, demoSql } from "../backend/src/accounts.js";
 async function confirmed(label) {
   const value = await hiddenPassword(label),
     again = await hiddenPassword("Confirm " + label);
@@ -22,13 +22,17 @@ const { values, positionals } = parseArgs({
 let db;
 try {
   const config = loadConfig();
-  db = createDatabase(config);
+  db = await createDatabase(config);
   const services = createServices(db, config);
   switch (positionals[0]) {
     case "check-db":
       if ((await db.query("SELECT 1 AS result"))[0].result !== 1)
         throw new Error("Unexpected database response.");
-      console.log("MySQL verified: SELECT 1 returned 1.");
+      console.log(
+        db.isFallback
+          ? "Offline SQLite fallback verified: SELECT 1 returned 1."
+          : "MySQL verified: SELECT 1 returned 1.",
+      );
       break;
     case "seed-demo":
       await seedDemo(db, {

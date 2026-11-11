@@ -1,3 +1,124 @@
 <%- include('partials/header',{title:'Events',active:'events'}) %>
-<div class="page-heading"><div><p class="eyebrow">CALENDAR MANAGEMENT</p><h1>Campus events<span class="heading-period">.</span></h1><p class="muted">Campus time zone: <%= config.campusTimezone %>. Adjacent slots are allowed; overlapping venue bookings are sequenced via the OS Scheduler.</p></div><div class="d-flex gap-2"><a class="btn btn-outline-secondary" href="/simulator">⚡ Open OS Scheduler</a><% if(user.role==='admin'){ %><a class="btn btn-primary" href="/events/new">+ Create event</a><% } %></div></div><div class="events-toolbar" hidden data-enhance><div class="event-search"><%- include('partials/icon',{name:'search'}) %><label class="visually-hidden" for="event-search">Search events</label><input id="event-search" type="search" placeholder="Search campus events" autocomplete="off"></div><span class="small-note" id="event-count" aria-live="polite"><%= events.length %> events</span></div><p class="search-empty panel" hidden>No matching events. Try a different search.</p><div class="event-grid"><% for(const e of events){ %><article class="panel event-card" data-event-card><span class="event-card-symbol"><%- include('partials/icon',{name:'calendar'}) %></span><div class="section-heading"><p class="eyebrow"><%= displayDate(e.event_date) %></p><span class="status <%= e.status==='scheduled'?'status-green':(e.status==='pending_schedule'?'status-amber':'status-gray') %>"><%= e.status==='pending_schedule'?'Pending OS':e.status %></span></div><h2><%= e.title %></h2><p class="description"><%= e.description %></p><dl class="event-details"><div><dt>Venue</dt><dd><%= e.venue_name %></dd></div><div><dt>Time</dt><dd><%= clock(e.start_time) %>–<%= clock(e.end_time) %></dd></div><div><dt>Organizer</dt><dd><%= e.organizer %></dd></div><div><dt>Expected</dt><dd><%= e.expected_attendance %> attendees</dd></div></dl><div class="card-actions"><a class="btn btn-outline-secondary" href="/simulator?date=<%= e.event_date %>">⚡ OS Schedule</a><% if(user.role==='admin'){ %><a class="btn btn-outline-primary" href="/events/<%= e.event_id %>/edit">Edit</a><form method="post" action="/events/<%= e.event_id %>/delete" data-confirm="Delete this event? This cannot be undone."><input type="hidden" name="csrf_token" value="<%= csrf %>"><button class="btn btn-outline-danger">Delete</button></form><% } else { %><span class="status status-green"><%= e.status==='scheduled'?'Scheduled event':'Event '+e.status %></span><% } %></div></article><% } if(!events.length){ %><section class="panel empty-state">No events have been created yet.</section><% } %></div>
+<% const isAdmin = user.role === 'admin'; %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow"><%= isAdmin ? 'CALENDAR MANAGEMENT' : 'CAMPUS EVENTS DIRECTORY' %></p>
+    <h1>Campus events<span class="heading-period">.</span></h1>
+    <p class="muted"><%= isAdmin ? `Campus time zone: ${config.campusTimezone}. Adjacent slots are allowed; overlapping venue bookings are sequenced via the OS Scheduler.` : 'Explore upcoming workshops, talks, and campus showcases. Reserve your seat or join a waitlist.' %></p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <% if (isAdmin) { %>
+      <a class="btn btn-outline-secondary" href="/simulator">⚡ Open OS Scheduler</a>
+      <a class="btn btn-primary" href="/events/new">+ Create event</a>
+    <% } else { %>
+      <a class="btn btn-primary" href="/registrations">My registrations</a>
+    <% } %>
+  </div>
+</div>
+
+<div class="events-toolbar" hidden data-enhance>
+  <div class="d-flex gap-2 flex-wrap align-items-center" style="flex:1;min-width:0;">
+    <div class="event-search">
+      <%- include('partials/icon',{name:'search'}) %>
+      <label class="visually-hidden" for="event-search">Search events</label>
+      <input id="event-search" type="search" placeholder="Search campus events, halls, or organizers" autocomplete="off">
+    </div>
+    <div>
+      <label class="visually-hidden" for="event-status-filter">Filter by status</label>
+      <select class="form-select" id="event-status-filter">
+        <option value="all">All statuses</option>
+        <option value="scheduled">Open / Scheduled</option>
+        <option value="pending_schedule"><%= isAdmin ? 'Pending OS' : 'Schedule TBA' %></option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+    </div>
+  </div>
+  <span class="small-note" id="event-count" aria-live="polite"><%= events.length %> <%= events.length === 1 ? 'event' : 'events' %></span>
+</div>
+<p class="search-empty panel" hidden>No matching events. Try a different search or filter.</p>
+
+<div class="event-grid">
+  <% for (const e of events) {
+       const regCount = Number(e.registration_count || 0);
+       const waitCount = Number(e.waitlist_count || 0);
+       const maxSeats = Number(e.expected_attendance || 0);
+       const pct = maxSeats > 0 ? Math.min(100, Math.round((regCount / maxSeats) * 100)) : 0;
+       const myStatus = registered.get(e.event_id) || null;
+       const isFull = regCount >= maxSeats;
+       const pendingLabel = isAdmin ? 'Pending OS' : 'Schedule TBA';
+  %>
+    <article class="panel event-card" data-event-card data-status="<%= e.status %>">
+      <div class="event-card-top">
+        <div class="date-badge date-badge-compact">
+          <span><%= dateMonth(e.event_date) %></span>
+          <strong><%= dateDay(e.event_date) %></strong>
+        </div>
+        <span class="status <%= e.status === 'scheduled' ? 'status-green' : (e.status === 'pending_schedule' ? 'status-amber' : 'status-gray') %>">
+          <% if (e.status === 'scheduled') { %><span class="status-dot" aria-hidden="true"></span><% } %>
+          <%= e.status === 'pending_schedule' ? pendingLabel : e.status %>
+        </span>
+      </div>
+      <h2><%= e.title %></h2>
+      <p class="description"><%= e.description %></p>
+      <dl class="event-details">
+        <div><dt>Venue</dt><dd><%= e.venue_name %></dd></div>
+        <div><dt>Time</dt><dd><%= clock(e.start_time) %>–<%= clock(e.end_time) %></dd></div>
+        <div><dt>Organizer</dt><dd><%= e.organizer %></dd></div>
+        <div><dt>Seating</dt><dd><strong><%= regCount %></strong> / <%= maxSeats %> reserved<% if (waitCount > 0) { %> <small class="text-muted">(<%= waitCount %> waitlisted)</small><% } %></dd></div>
+      </dl>
+      <div class="capacity-track <%= pct >= 85 ? 'capacity-high' : '' %>" aria-hidden="true"><span style="width:<%= pct %>%"></span></div>
+      <div class="card-actions">
+        <% if (isAdmin) { %>
+          <a class="btn btn-outline-secondary" href="/events/<%= e.event_id %>/attendees">Attendees (<%= regCount %>)</a>
+          <a class="btn btn-outline-secondary" href="/simulator?date=<%= e.event_date %>">⚡ OS Schedule</a>
+          <a class="btn btn-outline-primary" href="/events/<%= e.event_id %>/edit">Edit event</a>
+          <form method="post" action="/events/<%= e.event_id %>/delete" data-confirm="Delete this event? This cannot be undone.">
+            <input type="hidden" name="csrf_token" value="<%= csrf %>">
+            <button class="btn btn-outline-danger">Delete</button>
+          </form>
+        <% } else { %>
+          <% if (myStatus === 'confirmed') { %>
+            <span class="status status-green">Registered</span>
+            <% if (e.registration_open && e.status !== 'cancelled') { %>
+              <form method="post" action="/events/<%= e.event_id %>/unregister" data-confirm="Cancel your registration for this event?">
+                <input type="hidden" name="csrf_token" value="<%= csrf %>">
+                <input type="hidden" name="return_to" value="/events">
+                <button class="btn btn-outline-danger">Cancel registration</button>
+              </form>
+            <% } %>
+          <% } else if (myStatus === 'waitlisted') { %>
+            <span class="status status-amber">Waitlisted</span>
+            <% if (e.registration_open && e.status !== 'cancelled') { %>
+              <form method="post" action="/events/<%= e.event_id %>/unregister" data-confirm="Leave the waitlist for this event?">
+                <input type="hidden" name="csrf_token" value="<%= csrf %>">
+                <input type="hidden" name="return_to" value="/events">
+                <button class="btn btn-outline-danger">Leave waitlist</button>
+              </form>
+            <% } %>
+          <% } else if (e.status === 'cancelled') { %>
+            <span class="status status-gray">Cancelled</span>
+          <% } else if (e.status === 'pending_schedule') { %>
+            <span class="status status-amber">Time confirming soon</span>
+          <% } else if (!e.registration_open) { %>
+            <span class="status status-gray">Registration closed</span>
+          <% } else if (isFull) { %>
+            <span class="status status-gray">Event full</span>
+            <form method="post" action="/events/<%= e.event_id %>/waitlist">
+              <input type="hidden" name="csrf_token" value="<%= csrf %>">
+              <button class="btn btn-outline-primary">Join waitlist</button>
+            </form>
+          <% } else { %>
+            <form method="post" action="/events/<%= e.event_id %>/register">
+              <input type="hidden" name="csrf_token" value="<%= csrf %>">
+              <button class="btn btn-primary">Register for event</button>
+            </form>
+          <% } %>
+        <% } %>
+      </div>
+    </article>
+  <% } %>
+  <% if (!events.length) { %>
+    <section class="panel empty-state">No events have been created yet.</section>
+  <% } %>
+</div>
 <%- include('partials/footer') %>

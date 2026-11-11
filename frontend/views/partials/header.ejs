@@ -1,7 +1,135 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="theme-color" content="#f3f5f9"><title><%= title %> · CampusFlow</title><link rel="preload" href="/static/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/vendor/bootstrap.min.css"><link rel="stylesheet" href="/static/app.css"><script defer src="/static/vendor/bootstrap.bundle.min.js"></script><script defer src="/static/vendor/gsap.min.js"></script><script defer src="/static/vendor/ScrollTrigger.min.js"></script><script defer src="/static/app.js"></script></head>
-<body class="<%= user?'workspace':'public-portal' %>" data-page="<%= active %>"><a class="skip-link" href="#main">Skip to content</a><div class="entry-line" aria-hidden="true"></div>
-<header class="site-header"><nav class="navbar navbar-expand-xl container-shell" aria-label="Main navigation"><a class="navbar-brand brand" href="/"><span class="brand-symbol" aria-hidden="true">C<span class="brand-dot"></span></span><span>CampusFlow<small>EVENTS. IN SYNC.</small></span></a>
-<% if(user){ %><button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navigation" aria-controls="navigation" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button><div class="collapse navbar-collapse" id="navigation"><p class="nav-caption">YOUR WORKSPACE</p><div class="navbar-nav me-auto"><% const links=[['/dashboard','Overview','dashboard','eye'],['/events','Events','events','calendar'],['/venues','Venues','venues','building'],['/simulator','OS Scheduler','simulator','cpu'],['/reports','DBMS queries','reports','users']]; for(const link of links){ %><a class="nav-link <%= active===link[2]?'active':'' %>" href="<%= link[0] %>" <% if(active===link[2]){ %>aria-current="page"<% } %>><%- include('icon',{name:link[3]}) %><span><%= link[1] %></span><% if(active===link[2]){ %><span class="nav-active-dot" aria-hidden="true"></span><% } %></a><% } %></div><div class="account"><div class="account-details"><span class="account-avatar" aria-hidden="true"><%= user.name.slice(0,1).toUpperCase() %></span><span><%= user.name %><small><%= user.role==='admin'?'Administrator':'Student' %></small></span></div><div class="account-actions"><button class="theme-toggle" hidden data-enhance type="button" aria-label="Switch color theme" title="Switch color theme"><%- include('icon',{name:'moon'}) %></button><form method="post" action="/logout"><input type="hidden" name="csrf_token" value="<%= csrf %>"><button class="btn btn-outline-secondary">Log out</button></form></div></div></div><% } else { %><span class="header-note">UNIVERSITY EVENT SYSTEM</span><button class="theme-toggle" hidden data-enhance type="button" aria-label="Switch color theme" title="Switch color theme"><%- include('icon',{name:'moon'}) %></button><% } %></nav></header>
-<% if(user){ %><div class="app-topbar"><span class="breadcrumb-label">Workspace <span aria-hidden="true">/</span> <strong><%= title %></strong></span><span class="prototype-tag"><span aria-hidden="true"></span> University Event System</span></div><% } %>
-<main tabindex="-1" id="main" class="container-shell page-main"><% for(const message of messages){ %><div class="alert alert-<%= message.type %>" role="<%= message.type==='success'?'status':'alert' %>"><%= message.text %></div><% } %>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f4f6fb">
+  <title><%= title %> · CampusFlow</title>
+  <link rel="preload" href="/static/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+  <script defer src="/static/vendor/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/vendor/gsap.min.js"></script>
+  <script defer src="/static/vendor/ScrollTrigger.min.js"></script>
+  <script defer src="/static/app.js"></script>
+</head>
+<body class="<%= user ? 'workspace' : 'public-portal' %>" data-page="<%= active %>">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="entry-line" aria-hidden="true"></div>
+  <header class="site-header">
+    <nav class="navbar navbar-expand-xl container-shell" aria-label="Main navigation">
+      <a class="navbar-brand brand" href="/">
+        <span class="brand-symbol" aria-hidden="true">
+          <%- include('icon', { name: 'shield' }) %>
+        </span>
+        <span class="brand-wordmark">
+          <span class="brand-name">CampusFlow<% if (user && user.role === 'admin') { %><span class="role-chip">ADMIN</span><% } %></span>
+          <small>EVENTS. IN SYNC.</small>
+        </span>
+      </a>
+      <% if (user) { %>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navigation" aria-controls="navigation" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navigation">
+          <% if (user.role === 'admin') { %>
+            <p class="nav-caption">CAMPUS MANAGEMENT</p>
+            <div class="navbar-nav me-auto">
+              <%
+                const mgmtLinks = [
+                  ['/dashboard', 'Overview', 'dashboard', 'eye'],
+                  ['/events', 'Events', 'events', 'calendar'],
+                  ['/venues', 'Venues', 'venues', 'building'],
+                ];
+                for (const link of mgmtLinks) {
+              %>
+                <a class="nav-link <%= active === link[2] ? 'active' : '' %>" href="<%= link[0] %>" <% if (active === link[2]) { %>aria-current="page"<% } %>>
+                  <%- include('icon', { name: link[3] }) %>
+                  <span><%= link[1] %></span>
+                  <% if (active === link[2]) { %><span class="nav-active-dot" aria-hidden="true"></span><% } %>
+                </a>
+              <% } %>
+              <p class="nav-caption nav-caption-inline">SCHEDULING &amp; DBMS</p>
+              <%
+                const techLinks = [
+                  ['/simulator', 'OS Scheduler', 'simulator', 'cpu'],
+                  ['/runs', 'Saved runs', 'runs', 'clock'],
+                  ['/reports', 'DBMS queries', 'reports', 'sparkles'],
+                  ['/users', 'Users', 'users', 'users'],
+                  ['/account', 'Account', 'account', 'user'],
+                ];
+                for (const link of techLinks) {
+              %>
+                <a class="nav-link <%= active === link[2] ? 'active' : '' %>" href="<%= link[0] %>" <% if (active === link[2]) { %>aria-current="page"<% } %>>
+                  <%- include('icon', { name: link[3] }) %>
+                  <span><%= link[1] %></span>
+                  <% if (active === link[2]) { %><span class="nav-active-dot" aria-hidden="true"></span><% } %>
+                </a>
+              <% } %>
+            </div>
+          <% } else { %>
+            <p class="nav-caption">STUDENT PORTAL</p>
+            <div class="navbar-nav me-auto">
+              <%
+                const studentLinks = [
+                  ['/dashboard', 'Overview', 'dashboard', 'eye'],
+                  ['/events', 'Events', 'events', 'calendar'],
+                  ['/registrations', 'My registrations', 'registrations', 'ticket'],
+                  ['/account', 'Account', 'account', 'user'],
+                ];
+                for (const link of studentLinks) {
+              %>
+                <a class="nav-link <%= active === link[2] ? 'active' : '' %>" href="<%= link[0] %>" <% if (active === link[2]) { %>aria-current="page"<% } %>>
+                  <%- include('icon', { name: link[3] }) %>
+                  <span><%= link[1] %></span>
+                  <% if (active === link[2]) { %><span class="nav-active-dot" aria-hidden="true"></span><% } %>
+                </a>
+              <% } %>
+            </div>
+          <% } %>
+
+          <div class="account">
+            <div class="account-details">
+              <span class="account-avatar" aria-hidden="true"><%= user.name.slice(0, 1).toUpperCase() %></span>
+              <span>
+                <%= user.name %>
+                <small><%= user.role === 'admin' ? 'Administrator' : (user.student_id || 'Student') %></small>
+              </span>
+            </div>
+            <div class="account-actions">
+              <button class="theme-toggle" hidden data-enhance type="button" aria-label="Switch color theme" title="Switch color theme">
+                <%- include('icon', { name: 'moon' }) %>
+              </button>
+              <form method="post" action="/logout">
+                <input type="hidden" name="csrf_token" value="<%= csrf %>">
+                <button class="btn btn-outline-secondary">Log out</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      <% } else { %>
+        <span class="header-note">UNIVERSITY EVENTS PORTAL</span>
+        <button class="theme-toggle" hidden data-enhance type="button" aria-label="Switch color theme" title="Switch color theme">
+          <%- include('icon', { name: 'moon' }) %>
+        </button>
+      <% } %>
+    </nav>
+  </header>
+  <% if (user) { %>
+    <div class="app-topbar">
+      <span class="breadcrumb-label">Campus <span aria-hidden="true">/</span> <strong><%= title %></strong></span>
+      <div class="topbar-right">
+        <span class="prototype-tag"><span class="live-beacon" aria-hidden="true"></span> <%= user.role === 'admin' ? 'Admin Console · Scheduling Engine' : 'Campus Hub Live' %></span>
+        <% if (user.role === 'admin') { %>
+          <a class="btn btn-primary btn-sm topbar-cta" href="/events/new">+ Create Event</a>
+        <% } else { %>
+          <a class="btn btn-primary btn-sm topbar-cta" href="/events">Browse Events</a>
+        <% } %>
+      </div>
+    </div>
+  <% } %>
+  <main tabindex="-1" id="main" class="container-shell page-main">
+    <% for (const message of messages) { %>
+      <div class="alert alert-<%= message.type %>" role="<%= message.type === 'success' ? 'status' : 'alert' %>"><%= message.text %></div>
+    <% } %>

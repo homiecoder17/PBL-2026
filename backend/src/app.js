@@ -25,12 +25,19 @@ import {
   fixed,
 } from "./format.js";
 import {
+  ALGORITHMS,
+  DEFAULT_QUANTUM,
+  MAX_QUANTUM,
+  NON_PREEMPTIVE_ALGORITHMS,
   parseProcesses,
   serializeTasks,
   schedule,
   eventsToCsv,
+  resultFromRows,
 } from "./scheduler.js";
-import { REPORTS, EVENT_LIST } from "./reports.js";
+import { signInput, saveSignedRun } from "./scheduling-store.js";
+import { REPORTS, EVENT_LIST, EVENT_LIST_GROUP_BY } from "./reports.js";
+import { createUser, changePassword } from "./accounts.js";
 
 export async function createApp(overrides = {}) {
   const config = loadConfig(overrides),
@@ -96,6 +103,7 @@ export async function createApp(overrides = {}) {
     req.session.messages = [];
     res.locals.csrf = ensureCsrf(req);
     res.locals.config = config;
+    res.locals.dbFallback = db.isFallback;
     Object.assign(res.locals, {
       clock,
       displayDate,
@@ -166,15 +174,32 @@ export async function createApp(overrides = {}) {
   });
   app.get("/dashboard", loginRequired, async (req, res) => {
     const scalar = async (sql, p = []) => Number((await db.query(sql, p))[0].n);
-    const stats = {
-      events: await scalar(
-        "SELECT COUNT(*) n FROM events WHERE status != 'cancelled'",
-      ),
-      venues: await scalar("SELECT COUNT(*) n FROM venues"),
-    };
+    const isAdmin = req.user.role === "admin";
+    const stats = isAdmin
+      ? {
+          events: await scalar(
+            "SELECT COUNT(*) n FROM events WHERE status != 'cancelled'",
+          ),
+          venues: await scalar("SELECT COUNT(*) n FROM venues"),
+          registrations: await scalar("SELECT COUNT(*) n FROM registrations"),
+          runs: await scalar("SELECT COUNT(*) n FROM scheduling_runs"),
+        }
+      : {
+          events: await scalar(
+            "SELECT COUNT(*) n FROM events WHERE status != 'cancelled'",
+          ),
+          venues: await scalar("SELECT COUNT(*) n FROM venues"),
+          registrations: await scalar(
+            "SELECT COUNT(*) n FROM registrations WHERE user_id=? AND status='confirmed'",
+            [req.user.user_id],
+          ),
+          waitlisted: await scalar(
+            "SELECT COUNT(*) n FROM registrations WHERE user_id=? AND status='waitlisted'",
+            [req.user.user_id],
+          ),
+        };
     const allEvents = await db.query(
-      EVENT_LIST +
-        " WHERE e.status != 'cancelled' ORDER BY e.event_date, e.start_time, e.event_id",
+      `${EVENT_LIST} WHERE e.status != 'cancelled' ${EVENT_LIST_GROUP_BY} ORDER BY e.event_date, e.start_time, e.event_id`,
     );
     const now = campusNow(config.campusTimezone);
     const upcoming = allEvents.filter(e => `${e.event_date} ${e.start_time}` > now).slice(0, 4);
@@ -185,24 +210,199 @@ export async function createApp(overrides = {}) {
       calendarEvents[e.event_date].push(e);
     }
     const venues = await db.query("SELECT * FROM venues ORDER BY venue_name");
+    const venueUtilization = isAdmin
+      ? await db.query(REPORTS.venue_utilization.sql)
+      : [];
+    const myRegistrations = isAdmin
+      ? []
+      : await db.query(
+          `SELECT r.status AS registration_status, e.event_id, e.title, e.event_date, e.start_time, e.end_time, v.venue_name
+           FROM registrations r
+           INNER JOIN events e ON r.event_id = e.event_id
+           INNER JOIN venues v ON e.venue_id = v.venue_id
+           WHERE r.user_id = ? AND e.status != 'cancelled'
+           ORDER BY e.event_date, e.start_time
+           LIMIT 4`,
+          [req.user.user_id],
+        );
 
-    res.render("dashboard", { stats, upcoming, allEvents, calendarEvents, venues, today: now.slice(0, 10) });
+    res.render("dashboard", {
+      stats,
+      upcoming,
+      allEvents,
+      calendarEvents,
+      venues,
+      venueUtilization,
+      myRegistrations,
+      today: now.slice(0, 10),
+    });
   });
   app.get("/events", loginRequired, async (req, res) => {
     const events = await db.query(
-      EVENT_LIST + " ORDER BY e.event_date,e.start_time,e.event_id",
+      `${EVENT_LIST} ${EVENT_LIST_GROUP_BY} ORDER BY e.event_date,e.start_time,e.event_id`,
     );
-    const registered = new Set(
+    const registered = new Map(
       (
-        await db.query("SELECT event_id FROM registrations WHERE user_id=?", [
-          req.user.user_id,
-        ])
-      ).map((r) => r.event_id),
+        await db.query(
+          "SELECT event_id, status FROM registrations WHERE user_id=?",
+          [req.user.user_id],
+        )
+      ).map((r) => [r.event_id, r.status]),
     );
     const now = campusNow(config.campusTimezone);
     for (const e of events)
       e.registration_open = `${e.event_date} ${e.start_time}` > now;
     res.render("events", { events, registered });
+  });
+  app.post("/events/:id/register", ...roleRequired("student"), async (req, res) => {
+    try {
+      await services.registerStudent(id(req.params.id), req.user.user_id);
+      flash(req, "success", "Registration confirmed.");
+    } catch (error) {
+      if (!(error instanceof UserError)) throw error;
+      flash(req, "danger", error.message);
+    }
+    res.redirect("/events");
+  });
+  app.post("/events/:id/waitlist", ...roleRequired("student"), async (req, res) => {
+    try {
+      const outcome = await services.registerStudent(
+        id(req.params.id),
+        req.user.user_id,
+        { allowWaitlist: true },
+      );
+      flash(
+        req,
+        "success",
+        outcome.status === "waitlisted"
+          ? "Added to the event waitlist. You will be promoted automatically if a seat opens."
+          : "Registration confirmed.",
+      );
+    } catch (error) {
+      if (!(error instanceof UserError)) throw error;
+      flash(req, "danger", error.message);
+    }
+    res.redirect("/events");
+  });
+  app.post("/events/:id/unregister", ...roleRequired("student"), async (req, res) => {
+    try {
+      const { promoted } = await services.unregisterStudent(
+        id(req.params.id),
+        req.user.user_id,
+      );
+      flash(
+        req,
+        "success",
+        promoted
+          ? "Registration cancelled. The next waitlisted student was promoted."
+          : "Registration cancelled.",
+      );
+    } catch (error) {
+      if (!(error instanceof UserError)) throw error;
+      flash(req, "danger", error.message);
+    }
+    const target = req.body.return_to === "/events" ? "/events" : "/registrations";
+    res.redirect(target);
+  });
+  app.get("/registrations", ...roleRequired("student"), async (req, res) => {
+    const registrations = await db.query(
+      `SELECT r.registration_id, r.status AS registration_status, r.checked_in, r.checked_in_at, r.registration_date,
+        e.*, v.venue_name, v.capacity, u.name AS organizer
+       FROM registrations r
+       INNER JOIN events e ON r.event_id = e.event_id
+       INNER JOIN venues v ON e.venue_id = v.venue_id
+       INNER JOIN users u ON e.created_by = u.user_id
+       WHERE r.user_id = ?
+       ORDER BY e.event_date, e.start_time, r.registration_id`,
+      [req.user.user_id],
+    );
+    const now = campusNow(config.campusTimezone);
+    for (const r of registrations)
+      r.registration_open = `${r.event_date} ${r.start_time}` > now;
+    res.render("registrations", { registrations });
+  });
+  app.get("/events/:id/attendees", ...roleRequired("admin"), async (req, res) => {
+    const eventId = id(req.params.id);
+    const event = (
+      await db.query(
+        `${EVENT_LIST} WHERE e.event_id = ? ${EVENT_LIST_GROUP_BY}`,
+        [eventId],
+      )
+    )[0];
+    if (!event) throw new HttpError(404, "Event not found.");
+    const attendees = await db.query(
+      `SELECT r.registration_id, r.status, r.checked_in, r.checked_in_at, r.registration_date,
+        u.user_id, u.name, u.email, u.student_id
+       FROM registrations r
+       INNER JOIN users u ON r.user_id = u.user_id
+       WHERE r.event_id = ?
+       ORDER BY CASE WHEN r.status='confirmed' THEN 0 ELSE 1 END, r.registration_id ASC`,
+      [eventId],
+    );
+    res.render("event-attendees", { event, attendees });
+  });
+  app.post(
+    "/events/:id/attendees/:regId/checkin",
+    ...roleRequired("admin"),
+    async (req, res) => {
+      const eventId = id(req.params.id);
+      const regId = id(req.params.regId);
+      try {
+        const { checkedIn } = await services.toggleCheckIn(eventId, regId);
+        flash(
+          req,
+          "success",
+          checkedIn ? "Attendee checked in." : "Check-in status cleared.",
+        );
+      } catch (error) {
+        if (!(error instanceof UserError)) throw error;
+        flash(req, "danger", error.message);
+      }
+      res.redirect(`/events/${eventId}/attendees`);
+    },
+  );
+  app.get("/events/:id/attendees.csv", ...roleRequired("admin"), async (req, res) => {
+    const eventId = id(req.params.id);
+    const event = (
+      await db.query("SELECT event_id, title FROM events WHERE event_id=?", [
+        eventId,
+      ])
+    )[0];
+    if (!event) throw new HttpError(404, "Event not found.");
+    const rows = await db.query(
+      `SELECT u.name, u.student_id, u.email, r.status, r.checked_in, r.checked_in_at, r.registration_date
+       FROM registrations r
+       INNER JOIN users u ON r.user_id = u.user_id
+       WHERE r.event_id = ?
+       ORDER BY CASE WHEN r.status='confirmed' THEN 0 ELSE 1 END, r.registration_id ASC`,
+      [eventId],
+    );
+    const csvCell = (val) => {
+      let s = String(val ?? "");
+      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+      return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+    };
+    const lines = [
+      ["Name", "Student ID", "Email", "Status", "Checked In", "Checked In At", "Registered At"].join(","),
+      ...rows.map((r) =>
+        [
+          r.name,
+          r.student_id || "",
+          r.email,
+          r.status,
+          r.checked_in ? "Yes" : "No",
+          r.checked_in_at || "",
+          r.registration_date,
+        ]
+          .map(csvCell)
+          .join(","),
+      ),
+    ];
+    res.set({
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="event-${eventId}-roster.csv"`,
+    });
+    res.send(lines.join("\r\n") + "\r\n");
   });
   async function eventEditor(req, res, eventId = null) {
     let event = eventId
@@ -278,7 +478,7 @@ export async function createApp(overrides = {}) {
     });
   }
 
-  app.get("/venues", loginRequired, async (req, res) => {
+  app.get("/venues", ...roleRequired("admin"), async (req, res) => {
     const venues = await db.query(`
       SELECT v.*, COUNT(e.event_id) AS event_count 
       FROM venues v 
@@ -362,18 +562,48 @@ export async function createApp(overrides = {}) {
       source = eventsToCsv(samples);
     }
 
+    const rawQuantum = req.body?.quantum ?? req.query.quantum;
+    let quantum = DEFAULT_QUANTUM;
+    if (rawQuantum !== undefined && String(rawQuantum).trim() !== "") {
+      try {
+        quantum = integer(String(rawQuantum).trim(), "Time quantum", 1, MAX_QUANTUM);
+      } catch (e) {
+        if (req.method === "POST") notify(res, e);
+      }
+    }
+
     const results = [];
+    const signedTokens = {};
     try {
       const tasks = parseProcesses(source);
-      for (const algorithm of ["FCFS", "SJF"])
-        results.push(schedule(tasks, algorithm));
+      for (const algorithm of ALGORITHMS) {
+        results.push(schedule(tasks, algorithm, { quantum }));
+        signedTokens[algorithm] = signInput(
+          tasks,
+          algorithm,
+          req.user.user_id,
+          config.secret,
+          Date.now(),
+          { quantum },
+        );
+      }
     } catch (e) {
       if (req.method === "POST") notify(res, e);
     }
 
+    const bestAlgorithm = results.length
+      ? results.reduce((best, cur) =>
+          cur.average_waiting_time < best.average_waiting_time ? cur : best,
+        ).algorithm
+      : null;
+
     res.render("simulator", {
       source: typeof source === "string" ? source : "",
+      quantum,
       results,
+      signedTokens,
+      nonPreemptiveAlgs: NON_PREEMPTIVE_ALGORITHMS,
+      bestAlgorithm,
       venues,
       selectedVenueId,
       selectedDate,
@@ -385,81 +615,49 @@ export async function createApp(overrides = {}) {
     });
   }
 
-  app.get("/simulator", loginRequired, simulator);
-  app.post("/simulator", loginRequired, simulator);
+  app.get("/simulator", ...roleRequired("admin"), simulator);
+  app.post("/simulator", ...roleRequired("admin"), simulator);
 
-  app.post("/simulator/commit", loginRequired, async (req, res) => {
+  app.post("/simulator/save", ...roleRequired("admin"), async (req, res) => {
     try {
-      const selectedVenueId = req.body.venue_id;
-      const eventDate = typeof req.body.event_date === "string" ? req.body.event_date.trim() : "";
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) throw new UserError("Valid event date is required.");
+      const runId = await saveSignedRun(
+        db,
+        req.body.input_token,
+        req.user.user_id,
+        config.secret,
+      );
+      flash(req, "success", "Saved scheduling run to database.");
+      res.redirect(`/runs/${runId}`);
+    } catch (e) {
+      flash(req, "danger", e.message || "Could not save scheduling run.");
+      res.redirect("/simulator");
+    }
+  });
 
-      const algorithm = req.body.algorithm === "SJF" ? "SJF" : "FCFS";
-      const rawWorkload = typeof req.body.workload === "string"
-        ? req.body.workload.replace(/&#34;|&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
-        : "";
-      const tasks = parseProcesses(rawWorkload);
-      const scheduledResult = schedule(tasks, algorithm);
-
-      const defaultVenue = (await db.query("SELECT * FROM venues ORDER BY venue_id LIMIT 1"))[0];
-      let targetVenue = null;
-      if (selectedVenueId && selectedVenueId !== "all") {
-        targetVenue = (await db.query("SELECT * FROM venues WHERE venue_id=?", [selectedVenueId]))[0];
-      }
-
-      let savedCount = 0;
-      for (const row of scheduledResult.rows) {
-        const cleanTitle = row.task_name.replace(/&#34;|&quot;|"/g, "").trim();
-        const startHour = 9 + row.start_time;
-        const endHour = startHour + row.burst_time;
-        if (endHour > 23) throw new UserError(`Scheduled event ${cleanTitle} exceeds operating day hours.`);
-
-        const startTime = `${String(startHour).padStart(2, "0")}:00`;
-        const endTime = `${String(endHour).padStart(2, "0")}:00`;
-
-        let existing = null;
-        if (targetVenue) {
-          existing = (await db.query(
-            "SELECT * FROM events WHERE venue_id=? AND event_date=? AND (title=? OR title LIKE ?) AND status != 'cancelled' LIMIT 1",
-            [targetVenue.venue_id, eventDate, cleanTitle, `%${cleanTitle}%`]
-          ))[0];
-        } else {
-          existing = (await db.query(
-            "SELECT * FROM events WHERE event_date=? AND (title=? OR title LIKE ?) AND status != 'cancelled' LIMIT 1",
-            [eventDate, cleanTitle, `%${cleanTitle}%`]
-          ))[0];
-        }
-
-        const venueIdToUse = existing ? existing.venue_id : (targetVenue ? targetVenue.venue_id : defaultVenue.venue_id);
-
-        if (existing) {
-          await db.query(
-            "UPDATE events SET title=?, start_time=?, end_time=?, status='scheduled', description=? WHERE event_id=?",
-            [
-              cleanTitle,
-              startTime,
-              endTime,
-              `Scheduled via OS ${algorithm}. Order #${row.start_time + 1}. Turnaround: ${row.turnaround_time}h, Wait: ${row.waiting_time}h.`,
-              existing.event_id,
-            ]
-          );
-        } else {
-          await services.saveEvent({
-            title: cleanTitle,
-            description: `Scheduled via OS ${algorithm}. Order #${row.start_time + 1}. Turnaround: ${row.turnaround_time}h, Wait: ${row.waiting_time}h.`,
-            event_date: eventDate,
-            start_time: startTime,
-            end_time: endTime,
-            venue_id: venueIdToUse,
-            expected_attendance: row.expected_students || Math.min(300, row.burst_time * 50),
-            status: "scheduled",
-          }, req.user.user_id);
-        }
-        savedCount++;
-      }
-
-      const scopeText = targetVenue ? `at ${targetVenue.venue_name}` : `across all venues`;
-      flash(req, "success", `OS ${algorithm} successfully scheduled ${savedCount} event(s) ${scopeText} on ${eventDate} and saved them to MySQL.`);
+  app.post("/simulator/commit", ...roleRequired("admin"), async (req, res) => {
+    try {
+      const rawWorkload =
+        typeof req.body.workload === "string"
+          ? req.body.workload
+              .replace(/&#34;|&quot;/g, '"')
+              .replace(/&#39;/g, "'")
+              .replace(/&amp;/g, "&")
+          : "";
+      const summary = await services.commitScheduledEvents({
+        workload: rawWorkload,
+        algorithm: req.body.algorithm,
+        venueId: req.body.venue_id,
+        eventDate:
+          typeof req.body.event_date === "string"
+            ? req.body.event_date.trim()
+            : "",
+        userId: req.user.user_id,
+      });
+      flash(
+        req,
+        "success",
+        `OS ${summary.algorithm} successfully scheduled ${summary.savedCount} event(s) ${summary.scopeText} on ${summary.eventDate} and saved them to database.`,
+      );
       res.redirect("/events");
     } catch (e) {
       if (!(e instanceof UserError)) throw e;
@@ -468,19 +666,139 @@ export async function createApp(overrides = {}) {
     }
   });
 
-  app.get("/reports", loginRequired, async (req, res) => {
+  app.get("/runs", ...roleRequired("admin"), async (req, res) => {
+    const runs = await db.query(
+      "SELECT sr.*, u.name AS owner_name FROM scheduling_runs sr INNER JOIN users u ON sr.created_by = u.user_id ORDER BY sr.created_at DESC, sr.run_id DESC LIMIT 50",
+    );
+    res.render("runs", { runs });
+  });
+
+  app.get("/runs/:id", ...roleRequired("admin"), async (req, res) => {
+    const runId = req.params.id;
+    if (
+      typeof runId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        runId,
+      )
+    ) {
+      throw new HttpError(404, "Scheduling run not found.");
+    }
+    const run = (
+      await db.query(
+        "SELECT sr.*, u.name AS owner_name FROM scheduling_runs sr INNER JOIN users u ON sr.created_by = u.user_id WHERE sr.run_id = ?",
+        [runId],
+      )
+    )[0];
+    if (!run) throw new HttpError(404, "Scheduling run not found.");
+    if (req.user.role !== "admin" && run.created_by !== req.user.user_id) {
+      throw new HttpError(403, "This scheduling run belongs to another user.");
+    }
+    const rows = await db.query(
+      "SELECT * FROM scheduling_results WHERE run_id = ? ORDER BY start_time, result_id",
+      [runId],
+    );
+    let timeline = null;
+    if (run.timeline_json) {
+      try {
+        timeline = JSON.parse(run.timeline_json);
+      } catch {
+        timeline = null;
+      }
+    }
+    const result = resultFromRows(rows, run.algorithm, timeline, {
+      quantum: run.quantum,
+    });
+    res.render("run", { run, result });
+  });
+
+  app.get("/reports", ...roleRequired("admin"), async (req, res) => {
     const selected = req.query.query || "events_and_venues";
     if (typeof selected !== "string" || !Object.hasOwn(REPORTS, selected))
       throw new HttpError(400, "Unknown query. Choose a listed DBMS query.");
     const report = REPORTS[selected];
     const rows = await db.query(report.sql);
+    const explain = req.query.explain === "1";
+    let explainRows = [];
+    if (explain) {
+      const explainSql = db.isFallback
+        ? `EXPLAIN QUERY PLAN ${report.sql}`
+        : `EXPLAIN ${report.sql}`;
+      explainRows = await db.query(explainSql);
+    }
     res.render("reports", {
       reports: REPORTS,
       selected,
       report,
       rows,
       columns: rows[0] ? Object.keys(rows[0]) : [],
+      explain,
+      explainRows,
+      explainColumns: explainRows[0] ? Object.keys(explainRows[0]) : [],
     });
+  });
+
+  async function listUsers() {
+    return db.query(
+      `SELECT u.user_id, u.name, u.email, u.student_id, u.role, u.created_at,
+        COUNT(DISTINCT r.registration_id) AS registration_count,
+        COUNT(DISTINCT sr.run_id) AS run_count
+       FROM users u
+       LEFT JOIN registrations r ON u.user_id = r.user_id
+       LEFT JOIN scheduling_runs sr ON u.user_id = sr.created_by
+       GROUP BY u.user_id, u.name, u.email, u.student_id, u.role, u.created_at
+       ORDER BY u.role, u.name`,
+    );
+  }
+
+  app.get("/users", ...roleRequired("admin"), async (req, res) => {
+    res.render("users", { users: await listUsers(), form: {} });
+  });
+
+  app.post("/users", ...roleRequired("admin"), async (req, res) => {
+    try {
+      await createUser(db, {
+        name: req.body.name,
+        email: req.body.email,
+        role: req.body.role === "admin" ? "admin" : "student",
+        studentId: req.body.student_id || null,
+        password: req.body.password,
+      });
+      flash(req, "success", "Account provisioned with salted scrypt password hash.");
+      return res.redirect("/users");
+    } catch (error) {
+      if (!(error instanceof UserError)) throw error;
+      notify(res, error);
+      return res.render("users", { users: await listUsers(), form: req.body });
+    }
+  });
+
+  app.get("/account", loginRequired, async (req, res) => {
+    res.render("account");
+  });
+
+  app.post("/account/password", loginRequired, async (req, res) => {
+    try {
+      if (req.body.new_password !== req.body.confirm_password) {
+        throw new UserError("New password and confirmation do not match.");
+      }
+      await changePassword(
+        db,
+        req.user.user_id,
+        req.body.current_password,
+        req.body.new_password,
+      );
+      const userId = req.user.user_id;
+      await regenerate(req);
+      req.session.userId = userId;
+      req.session.messages = [];
+      ensureCsrf(req);
+      flash(req, "success", "Password updated and session rotated.");
+      return res.redirect("/account");
+    } catch (error) {
+      if (!(error instanceof UserError)) throw error;
+      notify(res, error);
+      return res.render("account");
+    }
   });
   app.use((_req, _res, next) => next(new HttpError(404, "Page not found.")));
   app.use((error, req, res, _next) => {
@@ -498,6 +816,7 @@ export async function createApp(overrides = {}) {
         messages: [],
         csrf: "",
         config,
+        dbFallback: db.isFallback,
         clock,
         displayDate,
         dateDay,

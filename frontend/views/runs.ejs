@@ -1,0 +1,55 @@
+<%- include('partials/header',{title:'Saved runs',active:'runs'}) %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">SIMULATION ARCHIVE</p>
+    <h1>Saved scheduling runs<span class="heading-period">.</span></h1>
+    <p class="muted">Immutable UUID snapshots of FCFS, SJF, SRTF, Priority, and Round Robin runs stored in the database.</p>
+  </div>
+  <a class="btn btn-primary" href="/simulator">Open OS Scheduler</a>
+</div>
+
+<section class="panel">
+  <% if (runs.length) { %>
+    <p class="table-scroll-hint">Scroll horizontally to view all columns.</p>
+    <div class="table-responsive" tabindex="0" role="region" aria-label="Saved scheduling runs table">
+      <table class="table">
+        <caption>Showing <%= runs.length %> saved run(s) (most recent first).</caption>
+        <thead>
+          <tr>
+            <th scope="col">Run ID</th>
+            <th scope="col">Algorithm</th>
+            <th scope="col">Quantum</th>
+            <th scope="col">Processes</th>
+            <th scope="col">Avg WT</th>
+            <th scope="col">Avg TAT</th>
+            <% if (user.role === 'admin') { %><th scope="col">Created by</th><% } %>
+            <th scope="col">Saved at</th>
+            <th scope="col">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const run of runs) { %>
+            <tr>
+              <td class="run-id"><code><%= run.run_id %></code></td>
+              <td><span class="status <%= run.algorithm === 'SRTF' || run.algorithm === 'SJF' ? 'status-green' : (run.algorithm === 'RR' ? 'status-amber' : 'status-gray') %>"><%= run.algorithm %></span></td>
+              <td><%= run.quantum ? `q=${run.quantum}` : '—' %></td>
+              <td><%= run.task_count %></td>
+              <td><%= fixed(run.average_waiting_time) %></td>
+              <td><%= fixed(run.average_turnaround_time) %></td>
+              <% if (user.role === 'admin') { %><td><%= run.owner_name %></td><% } %>
+              <td><%= String(run.created_at).slice(0, 19).replace('T', ' ') %></td>
+              <td><a class="btn btn-outline-primary btn-sm" href="/runs/<%= run.run_id %>">Inspect run</a></td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <div class="empty-state">
+      <h2>No saved runs yet.</h2>
+      <p class="muted mb-3">Run a comparison in the OS Scheduler and save a snapshot to archive it here.</p>
+      <a class="btn btn-primary" href="/simulator">Launch OS Scheduler</a>
+    </div>
+  <% } %>
+</section>
+<%- include('partials/footer') %>

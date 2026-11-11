@@ -2,7 +2,7 @@
 import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { hiddenPassword } from "../src/terminal.js";
+import { hiddenPassword } from "../backend/src/terminal.js";
 const base = process.env.BROWSER_URL || "http://127.0.0.1:3000";
 if (!["127.0.0.1", "localhost"].includes(new URL(base).hostname))
   throw new Error(
@@ -161,7 +161,7 @@ try {
   await page.locator("#venue_name").fill(venueName);
   await page.locator("#capacity").fill("20");
   await page.locator("#resources").fill("Whiteboard");
-  await page.getByRole("button", { name: "Save venue" }).click();
+  await page.getByRole("button", { name: "Add venue to campus" }).click();
   await page.waitForURL("**/venues");
   card = page.locator("article").filter({
     has: page.getByRole("heading", { name: venueName, exact: true }),
@@ -169,7 +169,7 @@ try {
   await card.getByRole("link", { name: "Edit venue" }).click();
   await capture("10-venue-edit");
   await page.locator("#capacity").fill("25");
-  await page.getByRole("button", { name: "Save venue" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
   await page.waitForURL("**/venues");
   card = page.locator("article").filter({
     has: page.getByRole("heading", { name: venueName, exact: true }),
@@ -178,7 +178,7 @@ try {
   await card.getByRole("button", { name: "Delete", exact: true }).click();
   await page.waitForLoadState("networkidle");
   await capture("11-simulator-input", "/simulator");
-  await page.getByRole("button", { name: "Run comparison" }).click();
+  await page.getByRole("button", { name: "Run OS scheduling comparison" }).click();
   await page.waitForLoadState("networkidle");
   if ((await page.locator(".schedule-result").count()) !== 2)
     throw new Error("Missing comparisons");
@@ -189,7 +189,7 @@ try {
   await page.waitForURL("**/runs/*");
   await capture("13-saved-fcfs");
   await page.goto(base + "/simulator");
-  await page.getByRole("button", { name: "Run comparison" }).click();
+  await page.getByRole("button", { name: "Run OS scheduling comparison" }).click();
   await page.getByRole("button", { name: "Save SJF run", exact: true }).click();
   await page.waitForURL("**/runs/*");
   await capture("14-saved-sjf");
@@ -224,7 +224,7 @@ try {
   await page.getByRole("button", { name: "Toggle navigation" }).click();
   if (
     !(await page
-      .getByRole("link", { name: "CPU simulator", exact: true })
+      .getByRole("link", { name: "OS Scheduler", exact: true })
       .isVisible())
   )
     throw new Error("Mobile navigation failed");
@@ -232,7 +232,7 @@ try {
   await capture("26-mobile-events", "/events");
   await capture("27-mobile-registrations", "/registrations");
   await page.goto(base + "/simulator");
-  await page.getByRole("button", { name: "Run comparison" }).click();
+  await page.getByRole("button", { name: "Run OS scheduling comparison" }).click();
   await page.waitForLoadState("networkidle");
   await capture("28-mobile-simulator");
   await page.getByRole("button", { name: "Toggle navigation" }).click();

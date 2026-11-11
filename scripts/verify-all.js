@@ -8,9 +8,10 @@ for (const args of [
   [
     "--test",
     "--test-concurrency=1",
-    "test/integration.test.js",
-    "test/passwords.test.js",
-    "test/scheduler.test.js",
+    "backend/tests/integration.test.js",
+    "backend/tests/app-integration.test.js",
+    "backend/tests/passwords.test.js",
+    "backend/tests/scheduler.test.js",
   ],
 ]) {
   const result = spawnSync(process.execPath, args, { stdio: "inherit" });

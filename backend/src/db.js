@@ -1,5 +1,7 @@
 import mysql from "mysql2/promise";
 import { DatabaseSync } from "node:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 
 function cleanSql(sql) {
   return sql
@@ -8,8 +10,14 @@ function cleanSql(sql) {
     .replace(/SET\s+time_zone\s*=\s*['"][^'"]+['"]/gi, "");
 }
 
-function initSqliteDatabase() {
-  const sqlite = new DatabaseSync(":memory:");
+function initSqliteDatabase(options = {}) {
+  const dbPath =
+    !options.forceFallback && options.sqlitePath ? options.sqlitePath : ":memory:";
+  if (dbPath !== ":memory:") {
+    mkdirSync(dirname(dbPath), { recursive: true });
+  }
+  const sqlite = new DatabaseSync(dbPath);
+  sqlite.exec("PRAGMA foreign_keys = ON;");
   sqlite.function("TIMESTAMP", (d, t) => `${d} ${t}`);
 
   sqlite.exec(`
@@ -19,14 +27,14 @@ function initSqliteDatabase() {
       email TEXT NOT NULL UNIQUE,
       student_id TEXT UNIQUE,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('student','admin')),
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS venues (
       venue_id INTEGER PRIMARY KEY AUTOINCREMENT,
       venue_name TEXT NOT NULL UNIQUE,
-      capacity INTEGER NOT NULL,
+      capacity INTEGER NOT NULL CHECK (capacity > 0),
       resources TEXT NOT NULL
     );
 
@@ -37,16 +45,20 @@ function initSqliteDatabase() {
       event_date TEXT NOT NULL,
       start_time TEXT NOT NULL,
       end_time TEXT NOT NULL,
-      expected_attendance INTEGER NOT NULL,
-      venue_id INTEGER NOT NULL REFERENCES venues(venue_id),
-      created_by INTEGER NOT NULL REFERENCES users(user_id),
-      status TEXT NOT NULL DEFAULT 'scheduled'
+      expected_attendance INTEGER NOT NULL CHECK (expected_attendance > 0),
+      venue_id INTEGER NOT NULL REFERENCES venues(venue_id) ON DELETE RESTRICT,
+      created_by INTEGER NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+      status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','pending_schedule','cancelled')),
+      CHECK (start_time >= '00:00' AND end_time < '24:00' AND end_time > start_time)
     );
 
     CREATE TABLE IF NOT EXISTS registrations (
       registration_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL REFERENCES users(user_id),
+      user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
       event_id INTEGER NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed','waitlisted')),
+      checked_in INTEGER NOT NULL DEFAULT 0 CHECK (checked_in IN (0,1)),
+      checked_in_at TEXT DEFAULT NULL,
       registration_date TEXT DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, event_id)
     );
@@ -55,35 +67,52 @@ function initSqliteDatabase() {
       task_id INTEGER PRIMARY KEY AUTOINCREMENT,
       process_id TEXT NOT NULL,
       task_name TEXT NOT NULL,
-      arrival_time INTEGER NOT NULL,
-      burst_time INTEGER NOT NULL,
+      arrival_time INTEGER NOT NULL CHECK (arrival_time >= 0),
+      burst_time INTEGER NOT NULL CHECK (burst_time > 0),
       priority INTEGER NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'sample'
+      status TEXT NOT NULL DEFAULT 'sample' CHECK (status IN ('sample','simulated'))
     );
 
     CREATE TABLE IF NOT EXISTS scheduling_runs (
       run_id TEXT PRIMARY KEY,
-      algorithm TEXT NOT NULL,
-      created_by INTEGER NOT NULL REFERENCES users(user_id),
+      algorithm TEXT NOT NULL CHECK (algorithm IN ('FCFS','SJF','SRTF','PRIORITY','RR')),
+      quantum INTEGER DEFAULT NULL CHECK (quantum IS NULL OR quantum > 0),
+      timeline_json TEXT DEFAULT NULL,
+      created_by INTEGER NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      task_count INTEGER NOT NULL,
-      average_waiting_time REAL NOT NULL,
-      average_turnaround_time REAL NOT NULL
+      task_count INTEGER NOT NULL CHECK (task_count > 0),
+      average_waiting_time REAL NOT NULL CHECK (average_waiting_time >= 0),
+      average_turnaround_time REAL NOT NULL CHECK (average_turnaround_time > 0)
     );
 
     CREATE TABLE IF NOT EXISTS scheduling_results (
       result_id INTEGER PRIMARY KEY AUTOINCREMENT,
       run_id TEXT NOT NULL REFERENCES scheduling_runs(run_id) ON DELETE CASCADE,
-      task_id INTEGER NOT NULL REFERENCES event_tasks(task_id),
-      algorithm TEXT NOT NULL,
+      task_id INTEGER NOT NULL REFERENCES event_tasks(task_id) ON DELETE RESTRICT,
+      algorithm TEXT NOT NULL CHECK (algorithm IN ('FCFS','SJF','SRTF','PRIORITY','RR')),
       process_id TEXT NOT NULL,
       task_name TEXT NOT NULL,
       arrival_time INTEGER NOT NULL,
       burst_time INTEGER NOT NULL,
+      priority INTEGER NOT NULL DEFAULT 0,
       start_time INTEGER NOT NULL,
       finish_time INTEGER NOT NULL,
       waiting_time INTEGER NOT NULL,
-      turnaround_time INTEGER NOT NULL
+      turnaround_time INTEGER NOT NULL,
+      UNIQUE(run_id, task_id),
+      CHECK (
+        arrival_time >= 0 AND burst_time > 0 AND start_time >= arrival_time
+        AND finish_time >= start_time + burst_time
+        AND turnaround_time = finish_time - arrival_time
+        AND waiting_time = turnaround_time - burst_time
+        AND waiting_time >= 0
+      )
+    );
+
+    CREATE TABLE IF NOT EXISTS app_sessions (
+      session_id TEXT PRIMARY KEY,
+      data TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
     );
   `);
 
@@ -97,7 +126,9 @@ function initSqliteDatabase() {
   const adminHash =
     "scrypt:32768:8:1$WqOr0FxZKzC51bUYfEQM9A$03aa3c775de6649ad30c686a70c197281bacb49ed5e63c9e7019f642f5b72083fc536c5d7baf8b43322e461738f8df06515f16411157e5c227f1c80024ca343b";
 
-  sqlite.exec(`
+  const existingVenues = sqlite.prepare("SELECT COUNT(*) AS n FROM venues").get().n;
+  if (options.seedDemoData !== false && existingVenues === 0) {
+    sqlite.exec(`
     INSERT INTO users (name, email, student_id, password_hash, role) VALUES
       ('Admin', 'admin@campus.test', NULL, '${adminHash}', 'admin'),
       ('Student', 'student@campus.test', 'CSE2026001', '${adminHash}', 'student');
@@ -128,8 +159,8 @@ function initSqliteDatabase() {
       ('P5', 'Update event statistics', 20, 2, 0, 'sample');
 
     INSERT INTO scheduling_runs (run_id, algorithm, created_by, task_count, average_waiting_time, average_turnaround_time) VALUES
-      ('88888888-8888-4888-8888-888888888888', 'FCFS', 1, 5, 6.8, 10.4),
-      ('99999999-9999-4999-9999-999999999999', 'SJF', 1, 5, 4.2, 7.8);
+      ('88888888-8888-4888-8888-888888888888', 'FCFS', 1, 5, 3.8, 7.4),
+      ('99999999-9999-4999-9999-999999999999', 'SJF', 1, 5, 3.2, 6.8);
 
     INSERT INTO scheduling_results (run_id, task_id, algorithm, process_id, task_name, arrival_time, burst_time, start_time, finish_time, waiting_time, turnaround_time) VALUES
       ('88888888-8888-4888-8888-888888888888', 1, 'FCFS', 'P1', 'Generate event report', 0, 7, 0, 7, 0, 7),
@@ -143,12 +174,13 @@ function initSqliteDatabase() {
       ('99999999-9999-4999-9999-999999999999', 4, 'SJF', 'P4', 'Prepare certificates', 5, 4, 12, 16, 7, 11),
       ('99999999-9999-4999-9999-999999999999', 5, 'SJF', 'P5', 'Update event statistics', 20, 2, 20, 22, 0, 2);
   `);
+  }
 
   async function query(sql, params = []) {
     const cleaned = cleanSql(sql).trim();
     if (!cleaned) return [];
     try {
-      const isSelect = /^(SELECT|PRAGMA)/i.test(cleaned);
+      const isSelect = /^(SELECT|PRAGMA|EXPLAIN)/i.test(cleaned);
       const stmt = sqlite.prepare(cleaned);
       if (isSelect) {
         return stmt.all(...params);
@@ -159,13 +191,12 @@ function initSqliteDatabase() {
         affectedRows: Number(res.changes),
       };
     } catch (err) {
-      if (
-        err.message?.includes("UNIQUE constraint failed") ||
-        err.code === "SQLITE_CONSTRAINT"
-      ) {
+      if (err.message?.includes("UNIQUE constraint failed")) {
         err.errno = 1062;
       } else if (err.message?.includes("FOREIGN KEY constraint failed")) {
         err.errno = 1451;
+      } else if (err.message?.includes("CHECK constraint failed")) {
+        err.errno = 3819;
       }
       throw err;
     }
@@ -199,6 +230,13 @@ function initSqliteDatabase() {
 }
 
 export async function createDatabase(config) {
+  if (config.forceFallback) {
+    return initSqliteDatabase({
+      seedDemoData: config.seedDemoData,
+      forceFallback: true,
+    });
+  }
+
   let pool = null;
   let useFallback = false;
 
@@ -231,7 +269,10 @@ export async function createDatabase(config) {
   }
 
   if (useFallback) {
-    return initSqliteDatabase();
+    return initSqliteDatabase({
+      seedDemoData: config.seedDemoData,
+      sqlitePath: config.sqlitePath,
+    });
   }
 
   pool.pool.on("connection", (connection) =>

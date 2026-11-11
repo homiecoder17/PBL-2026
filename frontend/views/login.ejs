@@ -1,3 +1,77 @@
 <%- include('partials/header',{title:'Log in',active:'login'}) %>
-<div class="login-layout"><section class="login-intro"><div class="hero-grid" aria-hidden="true"></div><p class="eyebrow">ONE CAMPUS. ENDLESS POSSIBILITIES.</p><h1 class="split-heading"><span>Less coordination.</span><span>More <em>connection.</em></span></h1><p class="lead-copy">The space between an idea and a great campus event? A little less paperwork. A lot more possibility.</p><div class="intro-list"><div><span>01</span><p><strong>Plan with confidence.</strong>Clear venues. Conflict-free time slots.</p></div><div><span>02</span><p><strong>Keep everyone connected.</strong>One place for events and registrations.</p></div><div><span>03</span><p><strong>Learn by doing.</strong>Explore OS scheduling and real relational data.</p></div></div><div class="hero-bottom"><span>BUILT FOR CAMPUS LIFE</span><span class="hero-arrow" aria-hidden="true">↗</span></div></section><section class="login-card"><div class="login-card-top"><span class="login-lock"><%- include('partials/icon',{name:'lock'}) %></span><span class="small-note">A secure place to begin.</span></div><p class="eyebrow">WELCOME TO CAMPUSFLOW</p><h2>Make yourself<br>at home.</h2><p class="muted">Log in with your administrator or student account.</p><form method="post"><input type="hidden" name="csrf_token" value="<%= csrf %>"><div class="mb-4"><label class="form-label" for="identifier">Email or student ID</label><input class="form-control" id="identifier" name="identifier" required maxlength="254" autocomplete="username" spellcheck="false" value="<%= identifier || 'admin@campus.test' %>" placeholder="you@university.edu"></div><div class="mb-4"><label class="form-label" for="password">Password</label><div class="password-field"><input class="form-control" id="password" name="password" type="password" required maxlength="256" autocomplete="current-password" value="CampusAdmin@2026"><button type="button" class="password-toggle" hidden data-enhance aria-label="Show password" aria-pressed="false"><%- include('partials/icon',{name:'eye'}) %></button></div></div><button class="btn btn-primary w-100">Log in <%- include('partials/icon',{name:'arrow'}) %></button></form></section></div>
+<div class="login-layout">
+  <section class="login-intro">
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="login-intro-top">
+      <div class="live-pill">
+        <span class="live-beacon" aria-hidden="true"></span>
+        <span>Campus Event Calendar is Live</span>
+      </div>
+      <h1 class="split-heading"><span>Less coordination.</span><span>More <em>connection.</em></span></h1>
+      <p class="lead-copy">CampusFlow brings student workshops, distinguished lectures, society showcases, and campus life together in one synchronized calendar.</p>
+    </div>
+
+    <div class="intro-features">
+      <div class="intro-feature-card">
+        <span class="intro-feature-icon"><%- include('partials/icon',{name:'sparkles'}) %></span>
+        <div>
+          <strong>Discover Campus Life</strong>
+          <p>Explore hackathons, seminars, club mixers, and cultural showcases across university venues.</p>
+        </div>
+      </div>
+      <div class="intro-feature-card">
+        <span class="intro-feature-icon"><%- include('partials/icon',{name:'ticket'}) %></span>
+        <div>
+          <strong>Reserve Seats with Live Capacity</strong>
+          <p>Claim event passes in one click and view real-time seating across campus halls and auditoriums.</p>
+        </div>
+      </div>
+      <div class="intro-feature-card">
+        <span class="intro-feature-icon"><%- include('partials/icon',{name:'users'}) %></span>
+        <div>
+          <strong>Stay Connected with Clubs &amp; Talks</strong>
+          <p>Track your confirmed registrations, waitlist updates, and upcoming schedule in one place.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-bottom">
+      <span>BUILT FOR CAMPUS LIFE</span>
+      <span class="hero-pill">Unified Campus Portal <span aria-hidden="true">↗</span></span>
+    </div>
+  </section>
+
+  <section class="login-card">
+    <div class="login-card-top">
+      <span class="login-lock"><%- include('partials/icon',{name:'shield'}) %></span>
+      <span class="small-note">University Sign-In Portal</span>
+    </div>
+    <p class="eyebrow">WELCOME TO CAMPUSFLOW</p>
+    <h2>Make yourself<br>at home.</h2>
+    <p class="muted">Sign in with your university email or student ID to access events and your passes.</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="<%= csrf %>">
+      <div class="mb-4">
+        <label class="form-label" for="identifier">Email or student ID</label>
+        <div class="input-icon-wrap">
+          <span class="input-leading-icon"><%- include('partials/icon',{name:'user'}) %></span>
+          <input class="form-control" id="identifier" name="identifier" required maxlength="254" autocomplete="username" spellcheck="false" value="<%= identifier || '' %>" placeholder="you@university.edu or CSE2026001">
+        </div>
+      </div>
+      <div class="mb-4">
+        <label class="form-label" for="password">Password</label>
+        <div class="password-field input-icon-wrap">
+          <span class="input-leading-icon"><%- include('partials/icon',{name:'lock'}) %></span>
+          <input class="form-control" id="password" name="password" type="password" required maxlength="256" autocomplete="current-password" placeholder="Enter your password">
+          <button type="button" class="password-toggle" hidden data-enhance aria-label="Show password" aria-pressed="false"><%- include('partials/icon',{name:'eye'}) %></button>
+        </div>
+      </div>
+      <button class="btn btn-primary w-100 login-submit-btn">Log in <%- include('partials/icon',{name:'arrow'}) %></button>
+    </form>
+    <div class="account-note small-note">
+      <%- include('partials/icon',{name:'check'}) %>
+      <span>New to campus? Contact your student coordinator or campus affairs desk to activate your university account.</span>
+    </div>
+  </section>
+</div>
 <%- include('partials/footer') %>

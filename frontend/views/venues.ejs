@@ -35,7 +35,7 @@
       <div class="card-actions">
         <a class="btn btn-outline-secondary" href="/simulator?venue_id=<%= v.venue_id %>">⚡ OS Schedule</a>
         <% if(user && user.role==='admin'){ %>
-          <a class="btn btn-outline-primary" href="/venues/<%= v.venue_id %>/edit">Edit</a>
+          <a class="btn btn-outline-primary" href="/venues/<%= v.venue_id %>/edit">Edit venue</a>
           <% if(Number(v.event_count || 0) === 0){ %>
             <form method="post" action="/venues/<%= v.venue_id %>/delete" data-confirm="Remove this venue? This cannot be undone.">
               <input type="hidden" name="csrf_token" value="<%= csrf %>">

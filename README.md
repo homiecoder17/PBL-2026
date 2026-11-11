@@ -67,14 +67,14 @@ secrets and blank DB passwords. Use your university's IANA timezone if different
 ## 4. Initialize MySQL and a limited application user
 From this project folder, as a MySQL administrator:
 ```bash
-mysql -u root -p --execute="SOURCE sql/init.sql"
+mysql -u root -p --execute="SOURCE backend/database/init.sql"
 ```
 The client prompts privately for the database administrator password.
 The script creates `university_event_system`, the original seven domain tables,
 and an additional `app_sessions` table for persistent server-side login sessions.
-It seeds 3 venues and 5 tasks but no fixed-password login accounts.
+It seeds 8 campus venues and 5 tasks but no fixed-password login accounts.
 
-Copy/edit `sql/create_app_user.sql.example` outside source control, replace the
+Copy/edit `backend/database/create_app_user.sql.example` outside source control, replace the
 password placeholder with a strong unique password, and execute it as a DB
 administrator. Put that user's credentials into .env; the app should not use root.
 The app needs only SELECT/INSERT/UPDATE/DELETE on its own database. Remove or
@@ -197,25 +197,25 @@ both editions concurrently unless every writer follows the same lock protocol.
 SQL initialization is not a general-purpose migration system.
 
 ## 10. File guide
-- src/server.js: Node HTTP server and graceful shutdown.
-- src/app.js: Express routes, role-aware forms, middleware, safe errors/headers.
-- src/config.js: validated environment configuration.
-- src/db.js: parameterized queries, connection pool, transactions.
-- src/session-store.js: MySQL-backed server-side sessions and expiry cleanup.
-- src/security.js: role guards, CSRF tokens, session regeneration/logout.
-- src/passwords.js: salted scrypt hashing and legacy hash verification.
-- src/services.js: event/venue/registration validation and row locks.
-- src/scheduler.js: CSV parser, FCFS/SJF algorithms, metrics, saved timeline recovery.
-- src/scheduling-store.js: HMAC-signed input, expiry, atomic result saving.
-- src/accounts.js: secure account creation, sample events, rollback SQL demo.
-- src/terminal.js: private local password prompts.
-- src/format.js: campus-local clock and display formatters.
-- src/reports.js: allowlisted queries and event listing JOIN.
-- views/: EJS pages and reusable header/footer/result partials.
-- public/: CSS/JS and bundled Bootstrap with its license.
+- backend/src/server.js: Node HTTP server and graceful shutdown.
+- backend/src/app.js: Express routes, role-aware forms, middleware, safe errors/headers.
+- backend/src/config.js: validated environment configuration.
+- backend/src/db.js: parameterized queries, MySQL connection pool, and SQLite fallback.
+- backend/src/session-store.js: MySQL-backed server-side sessions and expiry cleanup.
+- backend/src/security.js: role guards, CSRF tokens, session regeneration/logout.
+- backend/src/passwords.js: salted scrypt hashing and legacy hash verification.
+- backend/src/services.js: event/venue/registration/commit validation and row locks.
+- backend/src/scheduler.js: CSV parser, FCFS/SJF algorithms, metrics, saved timeline recovery.
+- backend/src/scheduling-store.js: HMAC-signed input, expiry, atomic result saving.
+- backend/src/accounts.js: secure account creation, sample events, rollback SQL demo.
+- backend/src/terminal.js: private local password prompts.
+- backend/src/format.js: campus-local clock and display formatters.
+- backend/src/reports.js: allowlisted queries and event listing JOIN.
+- frontend/views/: EJS pages and reusable header/footer/result partials.
+- frontend/public/: CSS/JS, Inter font, GSAP, and bundled Bootstrap with licenses.
 - scripts/: CLI, syntax/template verification, browser and full-test commands.
-- test/: real-MySQL integration tests plus pure algorithm/password tests.
-- sql/: schema/sample records/query examples and DB-user templates.
+- backend/tests/: real-MySQL + fallback integration tests plus pure algorithm/password tests.
+- backend/database/: schema/sample records/query examples and DB-user templates.
 - docs/: academic notes, test evidence, traceability, screenshots, demo workflow.
 
 ## Troubleshooting

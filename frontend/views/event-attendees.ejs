@@ -1,0 +1,105 @@
+<%- include('partials/header',{title:`Attendees · ${event.title}`,active:'events'}) %>
+<%
+  const confirmed = attendees.filter((a) => a.status === 'confirmed');
+  const waitlisted = attendees.filter((a) => a.status === 'waitlisted');
+  const checkedInCount = confirmed.filter((a) => a.checked_in).length;
+%>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">EVENT ROSTER &amp; CHECK-IN</p>
+    <h1><%= event.title %><span class="heading-period">.</span></h1>
+    <p class="muted"><%= displayDate(event.event_date) %> · <%= clock(event.start_time) %>–<%= clock(event.end_time) %> · <%= event.venue_name %></p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-primary" href="/events/<%= event.event_id %>/attendees.csv">Export CSV roster</a>
+    <a class="btn btn-outline-secondary" href="/events">Back to events</a>
+  </div>
+</div>
+
+<div class="metric-grid mb-4">
+  <div class="panel metric"><div class="metric-top"><span>Confirmed</span></div><strong><%= confirmed.length %></strong><small>of <%= event.expected_attendance %> seat limit</small></div>
+  <div class="panel metric"><div class="metric-top"><span>Checked in</span></div><strong><%= checkedInCount %></strong><small>present attendees</small></div>
+  <div class="panel metric"><div class="metric-top"><span>Waitlisted</span></div><strong><%= waitlisted.length %></strong><small>auto-promoted on cancellation</small></div>
+  <div class="panel metric"><div class="metric-top"><span>Remaining seats</span></div><strong><%= Math.max(0, Number(event.expected_attendance) - confirmed.length) %></strong><small><%= event.venue_name %></small></div>
+</div>
+
+<section class="panel mb-4">
+  <h2>Confirmed attendees (<%= confirmed.length %>)</h2>
+  <% if (confirmed.length) { %>
+    <p class="table-scroll-hint">Scroll horizontally to view all columns.</p>
+    <div class="table-responsive" tabindex="0" role="region" aria-label="Confirmed attendees table">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Student ID</th>
+            <th scope="col">Email</th>
+            <th scope="col">Registered at</th>
+            <th scope="col">Check-in</th>
+            <th scope="col">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const a of confirmed) { %>
+            <tr>
+              <td><strong><%= a.name %></strong></td>
+              <td><%= a.student_id || '—' %></td>
+              <td><%= a.email %></td>
+              <td><%= String(a.registration_date).slice(0, 19).replace('T', ' ') %></td>
+              <td>
+                <% if (a.checked_in) { %>
+                  <span class="status status-green">Checked in</span>
+                <% } else { %>
+                  <span class="status status-gray">Pending</span>
+                <% } %>
+              </td>
+              <td>
+                <form method="post" action="/events/<%= event.event_id %>/attendees/<%= a.registration_id %>/checkin">
+                  <input type="hidden" name="csrf_token" value="<%= csrf %>">
+                  <button class="btn btn-sm <%= a.checked_in ? 'btn-outline-secondary' : 'btn-outline-primary' %>">
+                    <%= a.checked_in ? 'Undo check-in' : 'Mark checked in' %>
+                  </button>
+                </form>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <p class="empty-state mb-0">No confirmed registrations yet.</p>
+  <% } %>
+</section>
+
+<section class="panel">
+  <h2>Waitlist queue (<%= waitlisted.length %>)</h2>
+  <% if (waitlisted.length) { %>
+    <div class="table-responsive" tabindex="0" role="region" aria-label="Waitlisted students table">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Position</th>
+            <th scope="col">Name</th>
+            <th scope="col">Student ID</th>
+            <th scope="col">Email</th>
+            <th scope="col">Joined waitlist</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% waitlisted.forEach((w, idx) => { %>
+            <tr>
+              <td><strong>#<%= idx + 1 %></strong></td>
+              <td><%= w.name %></td>
+              <td><%= w.student_id || '—' %></td>
+              <td><%= w.email %></td>
+              <td><%= String(w.registration_date).slice(0, 19).replace('T', ' ') %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <p class="empty-state mb-0">No students are currently waiting for seats.</p>
+  <% } %>
+</section>
+<%- include('partials/footer') %>
