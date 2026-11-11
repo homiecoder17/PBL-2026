@@ -1,0 +1,28 @@
+{
+  "findings": [
+    {
+      "page": "39-login-320",
+      "pageOverflow": false
+    },
+    {
+      "page": "40-keyboard-login",
+      "pageOverflow": false
+    },
+    {
+      "page": "41-login-text-resize-200",
+      "pageOverflow": false
+    },
+    {
+      "page": "42-dashboard-320",
+      "pageOverflow": false
+    }
+  ],
+  "keyboardFocus": {
+    "outline": "solid",
+    "width": "3px"
+  },
+  "keyboardDisclosure": true,
+  "textResize": "200% root font sizing (not native browser zoom)",
+  "screenReader": "Not verified",
+  "errors": []
+}

@@ -1,0 +1,4 @@
+-- Optional: a separate test user, never the application's live credentials.
+-- EDIT THE PASSWORD before executing as a MySQL administrator.
+CREATE USER 'ues_tester'@'127.0.0.1' IDENTIFIED BY 'REPLACE_WITH_A_DIFFERENT_LONG_RANDOM_PASSWORD';
+GRANT ALL PRIVILEGES ON university_event_system_test.* TO 'ues_tester'@'127.0.0.1';

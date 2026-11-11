@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+	<testcase name="Schema sample records and application health are real and valid" time="0.482981" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Correct administrator login grants dashboard access" time="0.258570" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Wrong login leaves no authenticated session" time="0.189399" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Student ID authentication works" time="0.197552" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Student cannot access administrator pages or create events" time="0.303031" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Logout destroys the server-side session and access" time="0.218311" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Missing and malformed Unicode CSRF tokens rejected with 400" time="0.085725" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Login regenerates the session ID and CSRF token" time="0.188530" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Session survives application recreation using the MySQL store" time="0.353174" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Expired MySQL sessions cannot authenticate" time="0.206911" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Passwords are hashed in MySQL and no public signup exists" time="0.163376" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Event CRUD inserts, updates and deletes actual records" time="0.100688" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid event rejected and rolled back: end before start" time="0.094038" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid event rejected and rolled back: equal times" time="0.073595" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid event rejected and rolled back: invalid date" time="0.082446" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid event rejected and rolled back: past date" time="0.061196" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid event rejected and rolled back: capacity exceeded" time="0.072652" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid event rejected and rolled back: zero attendance" time="0.122953" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid event rejected and rolled back: unknown venue" time="0.087877" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid event rejected and rolled back: invalid status" time="0.145673" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid event rejected and rolled back: non-numeric venue" time="0.110355" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Overlaps rejected; adjacent slots and another venue accepted" time="0.121358" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Conflicting event edits roll back and cancellation frees the slot" time="0.144443" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Concurrent identical venue bookings allow exactly one event" time="0.101497" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Venue CRUD and duplicate names are handled" time="0.074024" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Referenced venue deletion and capacity reduction rejected" time="0.066916" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Event creation and editing HTML forms work" time="0.259035" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Student registration stores time and rejects duplicate" time="0.116576" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Database UNIQUE independently prevents duplicate registration" time="0.206066" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Full event rejects another student" time="0.178150" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Concurrent requests for the final seat allow exactly one registration" time="0.127681" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Cancellation rejects new registration and deletion cascades old records" time="0.131619" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Attendance limit cannot fall below existing registrations" time="0.164853" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Past-start events reject registrations" time="0.099769" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Student registration/history route works; admin registration forbidden" time="0.363454" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Foreign keys and CHECK constraints reject invalid SQL writes" time="0.249892" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Repeated saved SJF runs have distinct IDs and correct stored values" time="0.110055" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid signed run cannot create result or task records" time="0.084241" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Failed result persistence is atomic" time="0.096152" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Simulator form compares both algorithms and saves to MySQL" time="0.312353" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Invalid simulator inputs and expired saves show validation errors" time="0.315262" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Students cannot view or list another user’s saved runs" time="0.310103" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Reports allow only known queries and enforce administrator access" time="0.237885" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="HTML is escaped and login SQL injection cannot authenticate" time="0.421066" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Secure account initialization refuses weak and existing accounts" time="0.616290" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Additional student creation and duplicate ID validation work" time="0.157538" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Future sample events seed once through the booking service" time="0.072220" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Non-destructive SQL CRUD demonstration rolls back all changes" time="0.078671" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Full workflow: admin event, student registration, simulation save, reports, cascade deletion" time="0.379142" classname="test" file="/data/campusflow-node/test/integration.test.js"/>
+	<testcase name="Passwords use salted scrypt hashes and correct/wrong verification" time="0.345140" classname="test" file="/data/campusflow-node/test/passwords.test.js"/>
+	<testcase name="Weak passwords and malformed hashes are rejected" time="0.000453" classname="test" file="/data/campusflow-node/test/passwords.test.js"/>
+	<testcase name="Original Werkzeug scrypt hashes verify without password resets" time="0.177636" classname="test" file="/data/campusflow-node/test/passwords.test.js"/>
+	<testcase name="FCFS reference: order, completion, waiting, turnaround, and averages" time="0.002130" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="SJF reference: arrived-only execution and exact timing metrics" time="0.000280" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="FCFS: initial and intermediate idle periods" time="0.000505" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="SJF: initial and intermediate idle periods" time="0.000351" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="SJF remains non-preemptive when a shorter process arrives" time="0.000411" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Both algorithms have deterministic alphabetical tie-breaking" time="0.000560" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: empty" time="0.000348" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: negative arrival" time="0.000232" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: zero burst" time="0.000362" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: fractional burst" time="0.000315" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: duplicate IDs" time="0.000288" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: reserved ID" time="0.003391" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: arrival too large" time="0.000198" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: burst too large" time="0.000183" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: missing field" time="0.000140" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: too many processes" time="0.000366" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Reject invalid workload: broken CSV" time="0.000502" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="CSV names containing commas round-trip correctly" time="0.000364" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Invalid algorithm and boolean arrival rejected" time="0.000181" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Saved rows reproduce exact idle timeline and stable process colors" time="0.000363" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="Signed scheduling input rejects tampering, wrong user, expiry, and future time" time="0.001216" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<testcase name="300 deterministic workloads satisfy non-overlap and CT/WT/TAT identities" time="0.015444" classname="test" file="/data/campusflow-node/test/scheduler.test.js"/>
+	<!-- tests 74 -->
+	<!-- suites 0 -->
+	<!-- pass 74 -->
+	<!-- fail 0 -->
+	<!-- cancelled 0 -->
+	<!-- skipped 0 -->
+	<!-- todo 0 -->
+	<!-- duration_ms 10320.185756 -->
+</testsuites>

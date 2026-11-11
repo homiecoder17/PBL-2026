@@ -1,0 +1,42 @@
+<%- include('partials/header',{title:(editing?'Edit venue':'Add venue'),active:'venues'}) %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">CAMPUS INFRASTRUCTURE</p>
+    <h1><%= editing?'Edit':'Add new' %> venue<span class="heading-period">.</span></h1>
+    <p class="muted">Configure seating capacity, available IT/audiovisual infrastructure, and event hosting facilities.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/venues">Back to venues</a>
+</div>
+
+<form method="post" class="panel form-panel">
+  <input type="hidden" name="csrf_token" value="<%= csrf %>">
+  <div class="row g-4">
+    <div class="col-md-8">
+      <label class="form-label" for="venue_name">Venue name</label>
+      <input class="form-control" id="venue_name" name="venue_name" required maxlength="100" value="<%= venue.venue_name || '' %>" placeholder="e.g. TCL 5-6, Robotics Lab">
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label" for="capacity">Seating capacity (Students)</label>
+      <input class="form-control" id="capacity" name="capacity" type="number" min="1" max="100000" required value="<%= venue.capacity || '' %>" placeholder="e.g. 120">
+    </div>
+
+    <div class="col-12">
+      <label class="form-label" for="resources">Resources, equipment &amp; facilities</label>
+      <textarea class="form-control" id="resources" name="resources" required maxlength="2000" rows="3" placeholder="e.g. High-speed LAN, Smart Projector, Audio System, Air Conditioning"><%= venue.resources || '' %></textarea>
+      <div class="small-note mt-1">List all installed equipment (e.g. Linux workstations, audio PA systems, projectors) for student and organizer reference.</div>
+    </div>
+
+    <div class="col-12">
+      <div class="notice">
+        <strong>DBMS Integrity &amp; Capacity Check:</strong> Venue capacity is strictly enforced by MySQL CHECK constraints. Capacity cannot be reduced below the attendance limit of any currently scheduled event.
+      </div>
+    </div>
+
+    <div class="col-12">
+      <button class="btn btn-primary"><%= editing?'Save changes':'Add venue to campus' %></button>
+      <a class="btn btn-outline-secondary ms-2" href="/venues">Cancel</a>
+    </div>
+  </div>
+</form>
+<%- include('partials/footer') %>

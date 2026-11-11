@@ -1,0 +1,16 @@
+{
+  "results": {
+    "press": {
+      "transform": "matrix(0.98, 0, 0, 0.98, 0, 0)",
+      "transition": "0s"
+    },
+    "material": {
+      "blur": "none",
+      "reducedTransparency": true,
+      "contrast": true
+    },
+    "motionReady": true
+  },
+  "realDeviceFrameProfiling": "Not verified",
+  "nativeSafari": "Not verified"
+}

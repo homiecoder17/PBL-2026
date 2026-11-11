@@ -1,0 +1,36 @@
+{
+  "name": "campusflow-node",
+  "version": "1.0.0",
+  "description": "University events, MySQL integrity, and FCFS/SJF simulation — 40% PBL prototype",
+  "main": "backend/src/server.js",
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "check": "node scripts/check.js",
+    "test": "node --test --test-concurrency=1 backend/tests/*.test.js",
+    "test:unit": "node --test backend/tests/scheduler.test.js",
+    "verify": "npm run check && npm test",
+    "test:browser": "node scripts/browser-check.js",
+    "cli": "node scripts/cli.js",
+    "verify:all": "node scripts/verify-all.js"
+  },
+  "keywords": [],
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "csv-parse": "7.0.3",
+    "dotenv": "17.4.2",
+    "ejs": "3.1.10",
+    "express": "5.3.0",
+    "express-session": "1.19.0",
+    "gsap": "3.15.0",
+    "mysql2": "3.24.6"
+  },
+  "devDependencies": {
+    "playwright": "1.64.0",
+    "supertest": "7.3.1"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  }
+}

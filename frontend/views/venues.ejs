@@ -1,0 +1,52 @@
+<%- include('partials/header',{title:'Venues',active:'venues'}) %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">CAMPUS INFRASTRUCTURE</p>
+    <h1>Campus venues<span class="heading-period">.</span></h1>
+    <p class="muted">Halls, computer laboratories, and auditoriums available for academic events and CPU process scheduling.</p>
+  </div>
+  <% if(user && user.role==='admin'){ %>
+    <a class="btn btn-primary" href="/venues/new">+ Add venue</a>
+  <% } %>
+</div>
+
+<div class="event-grid">
+  <% for(const v of venues){ %>
+    <article class="panel venue-card">
+      <span class="venue-symbol"><%- include('partials/icon',{name:'building'}) %></span>
+      <div class="section-heading">
+        <p class="eyebrow">SEATING CAPACITY</p>
+        <span class="status status-green"><%= v.capacity %> seats</span>
+      </div>
+      <h2><%= v.venue_name %></h2>
+      <p class="description"><%= v.resources %></p>
+      
+      <dl class="event-details">
+        <div>
+          <dt>Scheduled Events</dt>
+          <dd><strong><%= v.event_count || 0 %> active</strong></dd>
+        </div>
+        <div>
+          <dt>Venue Core ID</dt>
+          <dd>Core #<%= v.venue_id %></dd>
+        </div>
+      </dl>
+
+      <div class="card-actions">
+        <a class="btn btn-outline-secondary" href="/simulator?venue_id=<%= v.venue_id %>">⚡ OS Schedule</a>
+        <% if(user && user.role==='admin'){ %>
+          <a class="btn btn-outline-primary" href="/venues/<%= v.venue_id %>/edit">Edit</a>
+          <% if(Number(v.event_count || 0) === 0){ %>
+            <form method="post" action="/venues/<%= v.venue_id %>/delete" data-confirm="Remove this venue? This cannot be undone.">
+              <input type="hidden" name="csrf_token" value="<%= csrf %>">
+              <button class="btn btn-outline-danger">Delete</button>
+            </form>
+          <% } else { %>
+            <button class="btn btn-outline-secondary" disabled title="Cannot delete: active events are booked here">In Use</button>
+          <% } %>
+        <% } %>
+      </div>
+    </article>
+  <% } %>
+</div>
+<%- include('partials/footer') %>

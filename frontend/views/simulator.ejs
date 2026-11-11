@@ -1,0 +1,161 @@
+<%- include('partials/header',{title:'OS Scheduler',active:'simulator'}) %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">OPERATING SYSTEMS LAB</p>
+    <h1>CPU process &amp; event scheduler<span class="heading-period">.</span></h1>
+    <p class="muted">Schedule concurrent event workloads using FCFS and SJF, evaluate turnaround times, and commit the schedule to MySQL.</p>
+  </div>
+</div>
+
+<% if(dayEvents && dayEvents.length){ %>
+  <div class="alert alert-info d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <span>
+      📅 Found <strong><%= dayEvents.length %></strong> event(s) in MySQL for <strong><%= selectedDate %></strong>
+      <% if(selectedVenueId && selectedVenueId !== 'all'){ %>
+        at <strong><%= venues.find(v => String(v.venue_id) === String(selectedVenueId))?.venue_name %></strong>
+      <% } else { %>
+        across all venues
+      <% } %>. Loaded into OS processes automatically.
+    </span>
+    <a class="btn btn-sm btn-primary" href="/events/new?date=<%= selectedDate %>">+ Add more events for this date</a>
+  </div>
+<% } %>
+
+<div class="simulator-input-grid">
+  <form class="panel" method="post" id="simulator-form">
+    <input type="hidden" name="csrf_token" value="<%= csrf %>">
+    
+    <div class="d-flex justify-content-between align-items-baseline mb-2">
+      <h2>Day Schedule &amp; OS Workload</h2>
+      <span class="badge bg-primary-subtle text-primary border"><%= selectedDate %></span>
+    </div>
+    <p class="small-note mb-3">Inspect scheduled events for any date, map them to CPU arrival &amp; burst times, and run OS algorithms.</p>
+
+    <!-- Quick Date Selection Buttons -->
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+      <span class="small-note fw-semibold">Quick Date:</span>
+      <a href="/simulator?date=<%= today %>&venue_id=<%= selectedVenueId %>" class="btn btn-sm <%= selectedDate===today ? 'btn-primary' : 'btn-outline-secondary' %>">Today (<%= today %>)</a>
+      <a href="/simulator?date=<%= tomorrow %>&venue_id=<%= selectedVenueId %>" class="btn btn-sm <%= selectedDate===tomorrow ? 'btn-primary' : 'btn-outline-secondary' %>">Tomorrow (<%= tomorrow %>)</a>
+      <a href="/simulator?date=<%= dayAfterTomorrow %>&venue_id=<%= selectedVenueId %>" class="btn btn-sm <%= selectedDate===dayAfterTomorrow ? 'btn-primary' : 'btn-outline-secondary' %>">Day After Tomorrow (<%= dayAfterTomorrow %>)</a>
+    </div>
+
+    <!-- Date & Venue Selectors -->
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label class="form-label" for="event_date">Selected date</label>
+        <input class="form-control" type="date" id="event_date" name="event_date" required min="<%= minDate %>" value="<%= selectedDate %>" onchange="this.form.submit()">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="venue_id">Target venue</label>
+        <select class="form-select" id="venue_id" name="venue_id" onchange="this.form.submit()">
+          <option value="all" <%= selectedVenueId==='all'?'selected':'' %>>All Venues (All events of <%= selectedDate %>)</option>
+          <% for(const v of venues){ %>
+            <option value="<%= v.venue_id %>" <%= String(v.venue_id)===String(selectedVenueId)?'selected':'' %>><%= v.venue_name %> (Capacity: <%= v.capacity %>)</option>
+          <% } %>
+        </select>
+      </div>
+    </div>
+
+    <!-- Clean visual event list / table -->
+    <% if(dayEvents && dayEvents.length > 0){ %>
+      <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <label class="form-label mb-0">Scheduled events for this date (<%= dayEvents.length %>)</label>
+          <span class="small-note text-muted">Auto-mapped to OS processes</span>
+        </div>
+        <div class="table-responsive border rounded" style="max-height: 240px; overflow-y: auto;">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th scope="col" style="width: 50px;">PID</th>
+                <th scope="col">Event Title</th>
+                <th scope="col">Venue</th>
+                <th scope="col">Start &rarr; AT</th>
+                <th scope="col">Students &rarr; BT</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% dayEvents.forEach((ev, idx) => { 
+                   const at = Math.max(0, parseInt(ev.start_time.split(':')[0], 10) - 9);
+                   const bt = Math.max(1, Math.ceil(ev.expected_attendance / 50));
+              %>
+              <tr>
+                <td><span class="badge bg-secondary">E<%= idx + 1 %></span></td>
+                <td><strong><%= ev.title %></strong></td>
+                <td><span class="small-note"><%= ev.venue_name || 'Auditorium' %></span></td>
+                <td><%= ev.start_time.slice(0, 5) %> <small class="text-muted">(AT=<%= at %>h)</small></td>
+                <td><%= ev.expected_attendance %> <small class="text-muted">(BT=<%= bt %>h)</small></td>
+                <td>
+                  <% if(ev.status === 'pending_schedule'){ %>
+                    <span class="status status-amber">Pending OS</span>
+                  <% } else { %>
+                    <span class="status status-green">Scheduled</span>
+                  <% } %>
+                </td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+        <p class="small-note mt-2 mb-0">✨ <em>Mapping rule:</em> <code>Arrival Time (AT) = Start Time &minus; 09:00 AM</code>, <code>Burst Time (BT) = ceil(Students / 50)</code>.</p>
+      </div>
+    <% } else { %>
+      <div class="p-3 mb-3 border rounded text-center" style="background: rgba(255, 255, 255, 0.03);">
+        <p class="mb-2 text-muted">No events found in MySQL for <%= selectedDate %>.</p>
+        <div class="d-flex justify-content-center gap-2 flex-wrap">
+          <a class="btn btn-sm btn-primary" href="/events/new?date=<%= selectedDate %>">+ Create event for <%= selectedDate %></a>
+          <button type="submit" name="load_samples" value="true" class="btn btn-sm btn-outline-secondary">Load Sample Workload</button>
+        </div>
+      </div>
+    <% } %>
+
+    <!-- Main Action Buttons -->
+    <div class="card-actions">
+      <button class="btn btn-primary" type="submit">Run OS scheduling comparison</button>
+      <a class="btn btn-outline-secondary" href="/events/new?date=<%= selectedDate %>">+ Add event for this date</a>
+      <a class="btn btn-outline-secondary" href="/simulator?date=<%= selectedDate %>&reset=1">Reset samples</a>
+    </div>
+
+    <!-- Advanced: Collapsible Raw CSV Workload -->
+    <details class="mt-3 pt-2 border-top">
+      <summary class="small-note" style="cursor: pointer; user-select: none;">🛠 Advanced: View / edit raw process CSV</summary>
+      <div class="mt-2">
+        <textarea class="form-control workload-input" id="processes" name="processes" rows="4" style="min-height: 100px;"><%= source %></textarea>
+        <p class="small-note mt-1 mb-0">Accepts <code>process_id, title, start_time, expected_students</code> or integer units.</p>
+      </div>
+    </details>
+  </form>
+
+  <aside class="panel rules-panel">
+    <p class="eyebrow">HOW THE OS SCHEDULER WORKS</p>
+    <h2>Event-to-OS mapping model</h2>
+    <ul>
+      <li><strong>Venue = Single CPU Core:</strong> The venue can only host one event process at a time.</li>
+      <li><strong>Start Time &rarr; Arrival Time (AT):</strong> <code>AT = Start Time &minus; 09:00 AM</code>.</li>
+      <li><strong>Expected Students &rarr; Burst Time (BT):</strong> <code>BT = ceil(Students / 50) hours</code>.</li>
+      <li><strong>FCFS vs SJF:</strong> FCFS schedules by arrival order; SJF prioritizes smaller student crowds first, eliminating the <em>Convoy Effect</em>.</li>
+    </ul>
+    <div class="notice">
+      The OS scheduler generates time slots starting from 09:00 AM on the selected date without venue overlap.
+    </div>
+  </aside>
+</div>
+
+<% if(results.length){ %>
+  <div class="comparison-strip panel">
+    <h2>Same input, compared</h2>
+    <% for(const r of results){ %>
+      <div>
+        <strong><%= r.algorithm %></strong>
+        <span>WT <%= fixed(r.average_waiting_time) %> hrs · TAT <%= fixed(r.average_turnaround_time) %> hrs</span>
+      </div>
+    <% } %>
+    <p class="small-note">Notice how SJF minimizes average waiting time across competing requests.</p>
+  </div>
+  <% for(const result of results){ %>
+    <%- include('partials/result',{result, source, selectedVenueId, selectedDate}) %>
+  <% } %>
+<% } %>
+
+<%- include('partials/footer') %>

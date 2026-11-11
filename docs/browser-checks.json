@@ -1,0 +1,324 @@
+{
+  "findings": [
+    {
+      "page": "01-login",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "02-login-error",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "03-admin-dashboard",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "04-events",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "05-event-form",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "06-event-edit",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "07-event-validation",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "08-venues",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "09-venue-form",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "10-venue-edit",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "11-simulator-input",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "12-simulator-results",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "13-saved-fcfs",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "14-saved-sjf",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "15-run-history",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "16-dbms-reports",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "17-student-roster",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "18-event-report",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "19-run-comparison",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "20-student-dashboard",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "21-student-events",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "22-registrations",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "23-forbidden",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "24-mobile-dashboard",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "25-mobile-menu",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "26-mobile-events",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "27-mobile-registrations",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "28-mobile-simulator",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "29-mobile-login",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "30-mobile-event-form",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "31-mobile-reports",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "32-dark-dashboard",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "33-empty-search",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "34-filtered-events",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "35-chosen-dark-theme",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "36-reduced-motion",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "37-password-hidden",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "pageOverflow": false
+    },
+    {
+      "page": "38-no-javascript-login",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "pageOverflow": false
+    }
+  ],
+  "javascriptErrors": [],
+  "checks": [
+    "Login/validation",
+    "Event create/edit/conflict/delete",
+    "Venue create/edit/delete",
+    "FCFS/SJF compare/save/retrieve",
+    "Student registration/history",
+    "Role restriction",
+    "Mobile navigation",
+    "Dark mode",
+    "Event search and empty state",
+    "Theme preference",
+    "Reduced motion",
+    "Password reveal/hide"
+  ],
+  "note": "Checks use seeded local demo accounts; two algorithm runs and a student registration may be retained."
+}

@@ -1,0 +1,4 @@
+-- EDIT THE PASSWORD before executing this file as a MySQL administrator.
+-- This is a template, not an executable default-credential setup.
+CREATE USER 'ues_app'@'127.0.0.1' IDENTIFIED BY 'REPLACE_WITH_A_LONG_RANDOM_PASSWORD';
+GRANT SELECT, INSERT, UPDATE, DELETE ON university_event_system.* TO 'ues_app'@'127.0.0.1';
