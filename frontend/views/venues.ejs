@@ -6,7 +6,10 @@
     <p class="muted">Halls, computer laboratories, and auditoriums available for academic events and CPU process scheduling.</p>
   </div>
   <% if(user && user.role==='admin'){ %>
-    <a class="btn btn-primary" href="/venues/new">+ Add venue</a>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-primary" href="/venues/assign">Open Venue Assignment Portal<% if (typeof queuedVenueRequests !== 'undefined' && queuedVenueRequests > 0) { %> (<%= queuedVenueRequests %>)<% } %></a>
+      <a class="btn btn-primary" href="/venues/new">+ Add venue</a>
+    </div>
   <% } %>
 </div>
 

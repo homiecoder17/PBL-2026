@@ -56,13 +56,14 @@
       <div class="col-md-6">
         <label class="form-label" for="role">Role</label>
         <select class="form-select" id="role" name="role">
-          <option value="student" <%= form.role !== 'admin' ? 'selected' : '' %>>Student</option>
+          <option value="student" <%= (!form.role || form.role === 'student') ? 'selected' : '' %>>Student</option>
+          <option value="faculty" <%= form.role === 'faculty' ? 'selected' : '' %>>Faculty / Organizer</option>
           <option value="admin" <%= form.role === 'admin' ? 'selected' : '' %>>Administrator</option>
         </select>
       </div>
       <div class="col-md-6">
-        <label class="form-label" for="student_id">Student ID (optional for admin)</label>
-        <input class="form-control" id="student_id" name="student_id" maxlength="32" value="<%= form.student_id || '' %>" placeholder="e.g. CSE2026002">
+        <label class="form-label" for="student_id">Campus / Student ID (optional for admin)</label>
+        <input class="form-control" id="student_id" name="student_id" maxlength="32" value="<%= form.student_id || '' %>" placeholder="e.g. CSE2026002 or FAC2026002">
       </div>
     </div>
     <div class="mb-4">

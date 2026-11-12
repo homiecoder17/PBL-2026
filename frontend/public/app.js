@@ -231,7 +231,12 @@ if (calendarDataNode && daysContainer) {
     payload = null;
   }
   if (payload) {
-    const { eventsByDate = {}, today = "", isAdmin = false } = payload;
+    const {
+      eventsByDate = {},
+      today = "",
+      isAdmin = false,
+      isFaculty = false,
+    } = payload;
     let [tYear, tMonth] = today.split("-").map(Number);
     let viewYear = tYear || new Date().getFullYear();
     let viewMonth = (tMonth || 1) - 1;
@@ -292,6 +297,22 @@ if (calendarDataNode && daysContainer) {
         );
         newLink.href = "/events/new?date=" + encodeURIComponent(dateKey);
         selDateActions.appendChild(newLink);
+      } else if (isFaculty) {
+        const regLink = el(
+          "a",
+          "btn btn-primary btn-sm w-100",
+          "+ Register Event for Date →",
+        );
+        regLink.href = "/faculty/events/new?date=" + encodeURIComponent(dateKey);
+        selDateActions.appendChild(regLink);
+
+        const browseLink = el(
+          "a",
+          "btn btn-outline-secondary btn-sm w-100",
+          "Browse All Events →",
+        );
+        browseLink.href = "/events";
+        selDateActions.appendChild(browseLink);
       } else {
         const browseLink = el(
           "a",
@@ -310,7 +331,9 @@ if (calendarDataNode && daysContainer) {
             "text-muted m-0 small-note",
             isAdmin
               ? "No events scheduled for this date. Launch the OS Scheduler to plan workloads."
-              : "No campus events scheduled for this date yet. Check nearby dates or browse the full directory.",
+              : isFaculty
+                ? "No campus events scheduled for this date yet. Register a new event to enter the venue queue."
+                : "No campus events scheduled for this date yet. Check nearby dates or browse the full directory.",
           ),
         );
         return;
@@ -335,7 +358,13 @@ if (calendarDataNode && daysContainer) {
           el(
             "span",
             "status " + (isPending ? "status-amber" : "status-green"),
-            isPending ? (isAdmin ? "Pending OS" : "Schedule TBA") : "Scheduled",
+            isPending
+              ? isAdmin
+                ? "Pending OS"
+                : isFaculty
+                  ? "In Queue"
+                  : "Schedule TBA"
+              : "Scheduled",
           ),
         );
         card.appendChild(topRow);
@@ -442,4 +471,16 @@ if (calendarDataNode && daysContainer) {
     const targetDate = eventDates[0] || today;
     if (targetDate) selectDate(targetDate, eventsByDate[targetDate] || []);
   }
+}
+
+// Faculty hub quick event roster selector
+const facultyJump = document.getElementById("faculty-event-jump");
+const facultyRosterBtn = document.getElementById("faculty-open-roster-btn");
+if (facultyJump && facultyRosterBtn) {
+  const syncRosterHref = () => {
+    const id = encodeURIComponent(facultyJump.value || "");
+    if (id) facultyRosterBtn.href = `/events/${id}/attendees`;
+  };
+  facultyJump.addEventListener("change", syncRosterHref);
+  syncRosterHref();
 }

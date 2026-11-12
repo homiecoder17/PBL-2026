@@ -548,3 +548,295 @@ test("Admin user provisioning, self password change, and persistent SQLite file 
     rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("Faculty RBAC, university-ID login, and zero technical jargon across faculty views", async () => {
+  const faculty = request.agent(server);
+  await login(faculty, "FAC2026001");
+
+  for (const path of [
+    "/dashboard",
+    "/faculty",
+    "/faculty/events/new",
+    "/events",
+    "/events/1/attendees",
+    "/account",
+  ]) {
+    const res = await faculty.get(path);
+    assert.equal(res.status, 200, `Expected 200 for faculty on ${path}`);
+    assert.doesNotMatch(res.text, TECH_JARGON, `Found disallowed jargon on ${path}`);
+  }
+
+  const csvRes = await faculty.get("/events/1/attendees.csv");
+  assert.equal(csvRes.status, 200);
+  assert.match(csvRes.headers["content-type"], /text\/csv/);
+
+  for (const blocked of [
+    "/venues",
+    "/venues/new",
+    "/venues/assign",
+    "/events/new",
+    "/reports",
+    "/users",
+    "/simulator",
+    "/runs",
+    "/registrations",
+  ]) {
+    assert.equal((await faculty.get(blocked)).status, 403, `Expected 403 for faculty on ${blocked}`);
+  }
+
+  const ft = await csrf(faculty, "/events");
+  assert.equal(
+    (await faculty.post("/events/1/register").type("form").send({ csrf_token: ft })).status,
+    403,
+  );
+  assert.equal(
+    (
+      await faculty
+        .post("/simulator/save")
+        .type("form")
+        .send({ csrf_token: ft, input_token: signInput(parseProcesses(SOURCE), "FCFS", 2, SECRET) })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await faculty.post("/venues/assign/1").type("form").send({ csrf_token: ft, venue_id: "1" })).status,
+    403,
+  );
+
+  // Student must be blocked from faculty & venue assignment portals
+  const student = request.agent(server);
+  await login(student, "student@campus.test");
+  for (const path of ["/faculty", "/faculty/events/new", "/events/1/attendees", "/events/1/attendees.csv", "/venues/assign"]) {
+    assert.equal((await student.get(path)).status, 403, `Expected 403 for student on ${path}`);
+  }
+});
+
+test("Faculty event creation -> venue queue -> admin multi-parameter venue assignment -> registration & check-in", async () => {
+  const faculty = request.agent(server);
+  await login(faculty, "faculty@campus.test");
+
+  const allHalls = await db.query(
+    "SELECT venue_id, venue_name, capacity FROM venues ORDER BY capacity DESC, venue_id ASC",
+  );
+  assert.ok(allHalls.length >= 2);
+  const largestHall = allHalls[0];
+  const preferredHall = allHalls[1];
+  const targetAttendance = Math.max(10, Math.floor(preferredHall.capacity * 0.85));
+
+  const slotDate = futureDate(18);
+  const fToken = await csrf(faculty, "/faculty/events/new");
+  const submitRes = await faculty
+    .post("/faculty/events/new")
+    .type("form")
+    .send({
+      csrf_token: fToken,
+      title: "Quantum Computing Seminar",
+      description: "Faculty seminar covering quantum error correction.",
+      event_date: slotDate,
+      start_time: "14:00",
+      end_time: "16:00",
+      expected_attendance: String(targetAttendance),
+      preferred_venue_id: String(preferredHall.venue_id),
+      event_category: "seminar",
+      priority_level: "high",
+      required_resources: ["Projector", "Microphone / PA Audio"],
+      setup_minutes: "20",
+      av_support_needed: "1",
+      accessibility_needed: "1",
+      faculty_notes: "Need lapel mic ready.",
+    });
+  assert.equal(submitRes.status, 302);
+  assert.equal(submitRes.headers.location, "/faculty");
+
+  const hubHtml = (await faculty.get("/faculty")).text;
+  assert.match(hubHtml, /Quantum Computing Seminar/);
+  assert.match(hubHtml, /HIGH/);
+  assert.match(hubHtml, /Queue #\d+ of \d+/);
+
+  const [createdEvent] = await db.query(
+    "SELECT event_id, status FROM events WHERE title=?",
+    ["Quantum Computing Seminar"],
+  );
+  assert.ok(createdEvent);
+  assert.equal(createdEvent.status, "pending_schedule");
+
+  const [createdReq] = await db.query(
+    "SELECT request_id, queue_status, priority_level FROM venue_requests WHERE event_id=?",
+    [createdEvent.event_id],
+  );
+  assert.ok(createdReq);
+  assert.equal(createdReq.queue_status, "queued");
+  assert.equal(createdReq.priority_level, "high");
+
+  // Create a conflicting scheduled event in preferredHall on the same slot
+  await services.saveEvent(
+    eventFields({
+      title: "Conflicting Hall Booking",
+      event_date: slotDate,
+      start_time: "14:30",
+      end_time: "15:30",
+      expected_attendance: "10",
+      venue_id: String(preferredHall.venue_id),
+      status: "scheduled",
+    }),
+    1,
+  );
+
+  // Admin reviews queued event in venue assignment portal with multi-parameter filters
+  const admin = request.agent(server);
+  await login(admin);
+  const assignPage = await admin.get("/venues/assign?min_headroom=10&strict_resources=0&enforce_buffer=1");
+  assert.equal(assignPage.status, 200);
+  assert.match(assignPage.text, /Quantum Computing Seminar/);
+  assert.match(assignPage.text, /Departmental Robotics Showcase/);
+  assert.match(assignPage.text, /Conflict/);
+
+  const aCsrf = await csrf(admin, "/venues/assign");
+
+  // Attempting to assign conflicting preferredHall must be rejected cleanly
+  const badAssign = await admin
+    .post(`/venues/assign/${createdReq.request_id}`)
+    .type("form")
+    .send({
+      csrf_token: aCsrf,
+      venue_id: String(preferredHall.venue_id),
+      admin_notes: "Try conflict",
+    });
+  assert.equal(badAssign.status, 302);
+  const [stillQueued] = await db.query(
+    "SELECT queue_status FROM venue_requests WHERE request_id=?",
+    [createdReq.request_id],
+  );
+  assert.equal(stillQueued.queue_status, "queued");
+
+  // Assign an eligible non-conflicting hall (largestHall)
+  const targetVenueId = String(largestHall.venue_id);
+  const okAssign = await admin
+    .post(`/venues/assign/${createdReq.request_id}`)
+    .type("form")
+    .send({
+      csrf_token: aCsrf,
+      venue_id: targetVenueId,
+      admin_notes: "Assigned with AV engineer on standby.",
+    });
+  assert.equal(okAssign.status, 302);
+
+  const [updatedEvent] = await db.query(
+    "SELECT status, venue_id FROM events WHERE event_id=?",
+    [createdEvent.event_id],
+  );
+  assert.equal(updatedEvent.status, "scheduled");
+  assert.equal(String(updatedEvent.venue_id), targetVenueId);
+
+  const [updatedReq] = await db.query(
+    "SELECT queue_status, assigned_venue_id FROM venue_requests WHERE request_id=?",
+    [createdReq.request_id],
+  );
+  assert.equal(updatedReq.queue_status, "assigned");
+  assert.equal(String(updatedReq.assigned_venue_id), targetVenueId);
+
+  // Student registers for newly opened faculty event, and faculty checks student in + downloads CSV
+  const student = request.agent(server);
+  await login(student, "student@campus.test");
+  const stToken = await csrf(student, "/events");
+  const stuReg = await student
+    .post(`/events/${createdEvent.event_id}/register`)
+    .type("form")
+    .send({ csrf_token: stToken });
+  assert.equal(stuReg.status, 302);
+
+  const rosterPage = await faculty.get(`/events/${createdEvent.event_id}/attendees`);
+  assert.equal(rosterPage.status, 200);
+  assert.match(rosterPage.text, /CSE2026001/);
+
+  const [regRow] = await db.query(
+    "SELECT registration_id FROM registrations WHERE event_id=?",
+    [createdEvent.event_id],
+  );
+  const fRosterToken = await csrf(faculty, `/events/${createdEvent.event_id}/attendees`);
+  const checkinRes = await faculty
+    .post(`/events/${createdEvent.event_id}/attendees/${regRow.registration_id}/checkin`)
+    .type("form")
+    .send({ csrf_token: fRosterToken });
+  assert.equal(checkinRes.status, 302);
+
+  const csvOut = await faculty.get(`/events/${createdEvent.event_id}/attendees.csv`);
+  assert.equal(csvOut.status, 200);
+  assert.match(csvOut.text, /CSE2026001,student@campus\.test,confirmed,Yes/);
+});
+
+test("Admin declines queue request, faculty revises & re-queues or withdraws, and admin provisions faculty account", async () => {
+  const admin = request.agent(server);
+  await login(admin);
+
+  const [seededReq] = await db.query("SELECT request_id, event_id FROM venue_requests LIMIT 1");
+  assert.ok(seededReq);
+
+  const aToken = await csrf(admin, "/venues/assign");
+  const declineRes = await admin
+    .post(`/venues/assign/${seededReq.request_id}/decline`)
+    .type("form")
+    .send({ csrf_token: aToken, admin_notes: "Shift slot 30 minutes later for maintenance" });
+  assert.equal(declineRes.status, 302);
+
+  const faculty = request.agent(server);
+  await login(faculty, "faculty@campus.test");
+  let fHtml = (await faculty.get("/faculty")).text;
+  assert.match(fHtml, /Returned for Revision/);
+  assert.match(fHtml, /Shift slot 30 minutes later for maintenance/);
+
+  // Re-enter queue with revised parameters
+  const fToken = await csrf(faculty, "/faculty");
+  const requeueRes = await faculty
+    .post("/faculty/queue")
+    .type("form")
+    .send({
+      csrf_token: fToken,
+      event_id: String(seededReq.event_id),
+      preferred_venue_id: "any",
+      priority_level: "urgent",
+      setup_minutes: "30",
+      custom_resources: "Projector, High-speed LAN",
+      faculty_notes: "Flexible timing approved.",
+    });
+  assert.equal(requeueRes.status, 302);
+
+  const [requeued] = await db.query(
+    "SELECT queue_status, priority_level FROM venue_requests WHERE request_id=?",
+    [seededReq.request_id],
+  );
+  assert.equal(requeued.queue_status, "queued");
+  assert.equal(requeued.priority_level, "urgent");
+
+  // Withdraw leaves event as an unqueued pending event ready to queue again later
+  const wToken = await csrf(faculty, "/faculty");
+  const withdrawRes = await faculty
+    .post(`/faculty/queue/${seededReq.request_id}/withdraw`)
+    .type("form")
+    .send({ csrf_token: wToken });
+  assert.equal(withdrawRes.status, 302);
+  fHtml = (await faculty.get("/faculty")).text;
+  assert.match(fHtml, /Queue an existing event for a venue/);
+
+  // Admin creates a new faculty user account
+  const uToken = await csrf(admin, "/users");
+  const newFacPass = "FacultyStrongPass#2026";
+  const createFac = await admin
+    .post("/users")
+    .type("form")
+    .send({
+      csrf_token: uToken,
+      name: "Prof. Vikram Rao",
+      email: "vikram@campus.test",
+      role: "faculty",
+      student_id: "FAC2026099",
+      password: newFacPass,
+    });
+  assert.equal(createFac.status, 302);
+
+  const newFac = request.agent(server);
+  await login(newFac, "FAC2026099", newFacPass);
+  const newFacHub = await newFac.get("/faculty");
+  assert.equal(newFacHub.status, 200);
+  assert.doesNotMatch(newFacHub.text, TECH_JARGON);
+});

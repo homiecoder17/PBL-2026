@@ -49,6 +49,19 @@ LEFT JOIN registrations r ON e.event_id = r.event_id
 GROUP BY v.venue_id, v.venue_name, v.capacity
 ORDER BY scheduled_events DESC, v.capacity DESC`,
   },
+  venue_requests_queue: {
+    title: "Faculty Venue Allocation Queue · Multi-Table JOIN",
+    sql: `SELECT vr.request_id, e.title AS event_title, u.name AS faculty_name, vr.event_size, vr.priority_level, vr.event_category, vr.queue_status,
+  pv.venue_name AS preferred_venue, av.venue_name AS assigned_venue, e.event_date, e.start_time, e.end_time
+FROM venue_requests vr
+INNER JOIN events e ON vr.event_id = e.event_id
+INNER JOIN users u ON vr.faculty_id = u.user_id
+LEFT JOIN venues pv ON vr.preferred_venue_id = pv.venue_id
+LEFT JOIN venues av ON vr.assigned_venue_id = av.venue_id
+ORDER BY CASE vr.queue_status WHEN 'queued' THEN 0 WHEN 'assigned' THEN 1 ELSE 2 END,
+  CASE vr.priority_level WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,
+  vr.request_id ASC`,
+  },
   venue_event_counts: {
     title: "Venue Event Distribution · LEFT JOIN / GROUP BY / COUNT",
     sql: `SELECT v.venue_id, v.venue_name, v.capacity, COUNT(e.event_id) AS total_events

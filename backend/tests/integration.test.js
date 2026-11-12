@@ -21,6 +21,7 @@ const tables = [
   "scheduling_results",
   "scheduling_runs",
   "event_tasks",
+  "venue_requests",
   "registrations",
   "events",
   "venues",

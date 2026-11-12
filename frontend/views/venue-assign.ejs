@@ -1,0 +1,218 @@
+<%- include('partials/header',{title:'Venue portal',active:'venue-assign'}) %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">ADMIN VENUE ALLOCATION ENGINE</p>
+    <h1>Venue assignment portal<span class="heading-period">.</span></h1>
+    <p class="muted">Evaluate queued faculty event requests against live hall availability, event size fit, equipment match, turnover buffers, and priority.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary" href="/venues">Manage campus halls</a>
+    <a class="btn btn-outline-primary" href="/simulator">Open OS Scheduler</a>
+  </div>
+</div>
+
+<form method="get" action="/venues/assign" class="panel mb-4">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label" for="min_headroom">Minimum spare seat headroom</label>
+      <select class="form-select" id="min_headroom" name="min_headroom">
+        <option value="0" <%= filters.minHeadroomPct === 0 ? 'selected' : '' %>>Any exact or larger hall fit</option>
+        <option value="10" <%= filters.minHeadroomPct === 10 ? 'selected' : '' %>>At least 10% buffer seats</option>
+        <option value="20" <%= filters.minHeadroomPct === 20 ? 'selected' : '' %>>At least 20% buffer seats</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-check">
+        <input class="form-check-input" type="checkbox" name="strict_resources" value="1" <%= filters.strictResources ? 'checked' : '' %>>
+        <span class="form-check-label">Require exact equipment match</span>
+      </label>
+    </div>
+    <div class="col-md-3">
+      <label class="form-check">
+        <input class="form-check-input" type="checkbox" name="enforce_buffer" value="1" <%= filters.enforceBuffer ? 'checked' : '' %>>
+        <span class="form-check-label">Enforce setup turnover buffer</span>
+      </label>
+    </div>
+    <div class="col-md-2 d-flex gap-2">
+      <button class="btn btn-primary w-100">Evaluate</button>
+      <a class="btn btn-outline-secondary" href="/venues/assign">Reset</a>
+    </div>
+  </div>
+</form>
+
+<section class="mb-4">
+  <div class="section-heading mb-3">
+    <div>
+      <p class="eyebrow">ACTIVE ASSIGNMENT QUEUE</p>
+      <h2>Queued faculty events (<%= queue.length %>)<span class="heading-period">.</span></h2>
+    </div>
+  </div>
+
+  <% if (queue.length) { %>
+    <div class="assign-stack">
+      <% for (const item of queue) { %>
+        <article class="panel assign-card">
+          <div class="assign-grid">
+            <div class="assign-summary">
+              <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
+                <span class="queue-ticket">Queue #<%= item.queuePosition %></span>
+                <span class="priority-pill priority-<%= item.priority_level %>"><%= item.priority_level.toUpperCase() %></span>
+                <span class="status status-amber"><%= item.event_category %></span>
+              </div>
+              <h3 class="mb-1"><%= item.title %></h3>
+              <p class="muted mb-2">Organized by <strong><%= item.faculty_name %></strong> (<%= item.faculty_code || item.faculty_email %>)</p>
+              <p class="small-note mb-3"><%= item.description %></p>
+
+              <dl class="queue-param-strip queue-param-compact">
+                <div><dt>Date &amp; Slot</dt><dd><%= displayDate(item.event_date) %> · <%= clock(item.start_time) %>–<%= clock(item.end_time) %></dd></div>
+                <div><dt>Event Size</dt><dd><strong><%= item.event_size %></strong> expected attendees</dd></div>
+                <div><dt>Setup Buffer</dt><dd><%= item.setup_minutes %> min turnover gap</dd></div>
+                <div><dt>Equipment Needed</dt><dd><%= item.required_resources %></dd></div>
+                <div><dt>Preferred Hall</dt><dd><%= item.preferred_venue_name ? `${item.preferred_venue_name} (${item.preferred_venue_capacity} seats)` : 'Open / Auto-recommend' %></dd></div>
+                <div><dt>AV / Access</dt><dd><%= [item.av_support_needed ? 'AV Tech Required' : null, item.accessibility_needed ? 'Accessible Entry' : null].filter(Boolean).join(', ') || 'Standard' %></dd></div>
+              </dl>
+
+              <% if (item.faculty_notes) { %>
+                <div class="notice mt-3 mb-0">
+                  <strong>Faculty Note:</strong> <%= item.faculty_notes %>
+                </div>
+              <% } %>
+            </div>
+
+            <div class="assign-matrix">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <p class="eyebrow mb-0">MULTI-PARAMETER VENUE RANKING</p>
+                <% if (item.recommendedVenueId) {
+                     const rec = item.candidates.find((c) => c.venue_id === item.recommendedVenueId);
+                %>
+                  <span class="status status-green">Best Fit: <%= rec.venue_name %> (<%= rec.score %>/100)</span>
+                <% } else { %>
+                  <span class="status status-amber">No venue passes current strict filters</span>
+                <% } %>
+              </div>
+
+              <div class="candidate-list">
+                <% for (const cand of item.candidates.slice(0, 5)) { %>
+                  <div class="candidate-row <%= cand.eligible ? (cand.venue_id === item.recommendedVenueId ? 'candidate-best' : '') : 'candidate-blocked' %>">
+                    <div class="candidate-main">
+                      <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <strong><%= cand.venue_name %></strong>
+                        <% if (cand.venue_id === item.recommendedVenueId) { %>
+                          <span class="badge bg-primary">Recommended</span>
+                        <% } %>
+                        <% if (cand.preferred) { %>
+                          <span class="badge bg-info-subtle text-info">Preferred</span>
+                        <% } %>
+                        <span class="status <%= cand.available ? 'status-green' : 'status-gray' %>">
+                          <%= cand.available ? 'Available' : 'Conflict' %>
+                        </span>
+                      </div>
+                      <small class="d-block muted mt-1">
+                        Capacity: <strong><%= cand.capacity %></strong> seats (<%= cand.fillPct %>% fill)
+                        · Equipment: <%= cand.resources %>
+                      </small>
+                      <% if (cand.eligible) { %>
+                        <small class="d-block text-success mt-1"><%= cand.reasons.join(' · ') %></small>
+                      <% } else { %>
+                        <small class="d-block text-danger mt-1"><%= cand.disqualifiers.join(' · ') %></small>
+                      <% } %>
+                      <% if (cand.warnings.length) { %>
+                        <small class="d-block text-warning-emphasis mt-1">Caution: <%= cand.warnings.join(' · ') %></small>
+                      <% } %>
+                    </div>
+                    <div class="candidate-score">
+                      <strong><%= cand.score %></strong>
+                      <small>/100</small>
+                    </div>
+                  </div>
+                <% } %>
+              </div>
+
+              <form method="post" action="/venues/assign/<%= item.request_id %>" class="mt-3 p-3 border rounded assign-action-box">
+                <input type="hidden" name="csrf_token" value="<%= csrf %>">
+                <div class="row g-2 align-items-end">
+                  <div class="col-md-6">
+                    <label class="form-label" for="assign-venue-<%= item.request_id %>">Select venue to assign</label>
+                    <select class="form-select form-select-sm" id="assign-venue-<%= item.request_id %>" name="venue_id" required>
+                      <% for (const cand of item.candidates) { %>
+                        <option value="<%= cand.venue_id %>" <%= cand.venue_id === item.recommendedVenueId ? 'selected' : '' %>>
+                          <%= cand.venue_name %> (<%= cand.capacity %> seats · <%= cand.eligible ? `Score ${cand.score}/100` : cand.disqualifiers[0] %>)
+                        </option>
+                      <% } %>
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label" for="assign-notes-<%= item.request_id %>">Assignment note (optional)</label>
+                    <input class="form-control form-control-sm" id="assign-notes-<%= item.request_id %>" name="admin_notes" maxlength="1000" placeholder="e.g. AV team notified 15 mins prior">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-check mb-0">
+                      <input class="form-check-input" type="checkbox" name="enforce_buffer" value="1" <%= filters.enforceBuffer ? 'checked' : '' %>>
+                      <span class="form-check-label small">Enforce <%= item.setup_minutes %>m buffer check</span>
+                    </label>
+                  </div>
+                  <div class="col-md-6 d-flex justify-content-end">
+                    <button class="btn btn-primary btn-sm w-100">Assign venue &amp; open event</button>
+                  </div>
+                </div>
+              </form>
+
+              <details class="mt-2">
+                <summary class="small-note text-danger" style="cursor:pointer;">Return request to faculty for changes</summary>
+                <form method="post" action="/venues/assign/<%= item.request_id %>/decline" class="d-flex gap-2 mt-2 flex-wrap">
+                  <input type="hidden" name="csrf_token" value="<%= csrf %>">
+                  <input class="form-control form-control-sm" style="flex:1;min-width:220px;" name="admin_notes" required maxlength="1000" placeholder="Explain what needs adjustment (e.g., alternate time or smaller audience)">
+                  <button class="btn btn-sm btn-outline-danger">Return to faculty</button>
+                </form>
+              </details>
+            </div>
+          </div>
+        </article>
+      <% } %>
+    </div>
+  <% } else { %>
+    <section class="panel empty-state">All faculty venue requests have been processed. No events are waiting in the queue.</section>
+  <% } %>
+</section>
+
+<section class="panel">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">ALLOCATION AUDIT LOG</p>
+      <h2>Recent venue decisions<span class="heading-period">.</span></h2>
+    </div>
+  </div>
+  <% if (recentRequests.length) { %>
+    <div class="table-responsive" tabindex="0" role="region" aria-label="Recent venue assignment decisions">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Event</th>
+            <th scope="col">Faculty</th>
+            <th scope="col">Date</th>
+            <th scope="col">Size</th>
+            <th scope="col">Decision</th>
+            <th scope="col">Assigned Venue</th>
+            <th scope="col">Reviewed By</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const rec of recentRequests) { %>
+            <tr>
+              <td><strong><%= rec.title %></strong><% if (rec.admin_notes) { %><small class="d-block muted"><%= rec.admin_notes %></small><% } %></td>
+              <td><%= rec.faculty_name %></td>
+              <td><%= displayDate(rec.event_date) %> · <%= clock(rec.start_time) %>–<%= clock(rec.end_time) %></td>
+              <td><%= rec.event_size %></td>
+              <td><span class="status <%= rec.queue_status === 'assigned' ? 'status-green' : 'status-gray' %>"><%= rec.queue_status %></span></td>
+              <td><%= rec.assigned_venue_name || '—' %></td>
+              <td><%= rec.reviewer_name || '—' %></td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <p class="empty-state mb-0">No venue assignments recorded yet.</p>
+  <% } %>
+</section>
+<%- include('partials/footer') %>

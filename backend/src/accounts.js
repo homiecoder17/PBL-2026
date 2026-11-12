@@ -18,10 +18,10 @@ export async function createUser(
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     throw new UserError("Enter a valid email.");
-  if (!["admin", "student"].includes(role))
-    throw new UserError("Role must be admin or student.");
+  if (!["admin", "faculty", "student"].includes(role))
+    throw new UserError("Role must be admin, faculty, or student.");
   if (studentId && !/^[A-Za-z0-9_-]{1,32}$/.test(studentId))
-    throw new UserError("Invalid student ID.");
+    throw new UserError("Invalid campus/student ID.");
   const dup = studentId
     ? await db.query(
         "SELECT user_id FROM users WHERE email=? OR student_id=?",
@@ -44,11 +44,13 @@ export async function createUser(
 export async function seedDemo(db, passwords) {
   validatePassword(passwords.adminPassword);
   validatePassword(passwords.studentPassword);
+  if (passwords.facultyPassword) validatePassword(passwords.facultyPassword);
   if (
     (
-      await db.query("SELECT user_id FROM users WHERE email IN (?,?)", [
+      await db.query("SELECT user_id FROM users WHERE email IN (?,?,?)", [
         "admin@campus.test",
         "student@campus.test",
+        "faculty@campus.test",
       ])
     ).length
   )
@@ -56,7 +58,10 @@ export async function seedDemo(db, passwords) {
       "Default accounts already exist; passwords were not overwritten.",
     );
   const adminHash = await hashPassword(passwords.adminPassword),
-    studentHash = await hashPassword(passwords.studentPassword);
+    studentHash = await hashPassword(passwords.studentPassword),
+    facultyHash = passwords.facultyPassword
+      ? await hashPassword(passwords.facultyPassword)
+      : null;
   await db.transaction(async (conn) => {
     await execute(
       conn,
@@ -74,6 +79,19 @@ export async function seedDemo(db, passwords) {
         "student",
       ],
     );
+    if (facultyHash) {
+      await execute(
+        conn,
+        "INSERT INTO users (name,email,student_id,password_hash,role) VALUES (?,?,?,?,?)",
+        [
+          "Dr. Meera Sharma",
+          "faculty@campus.test",
+          "FAC2026001",
+          facultyHash,
+          "faculty",
+        ],
+      );
+    }
   });
 }
 export async function seedEvents(db, services, config) {

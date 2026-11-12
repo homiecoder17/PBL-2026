@@ -38,11 +38,12 @@ export function loginRequired(req, res, next) {
   }
   next();
 }
-export function roleRequired(role) {
+export function roleRequired(...roles) {
+  const allowed = new Set(roles);
   return [
     loginRequired,
     (req, _res, next) =>
-      req.user.role === role
+      allowed.has(req.user.role)
         ? next()
         : next(
             new HttpError(

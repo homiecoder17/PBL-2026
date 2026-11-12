@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(254) NOT NULL UNIQUE,
   student_id VARCHAR(32) UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
-  role ENUM('student','admin') NOT NULL,
+  role ENUM('student','faculty','admin') NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -51,6 +51,37 @@ CREATE TABLE IF NOT EXISTS registrations (
   CONSTRAINT fk_registration_event FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
   INDEX idx_registration_event (event_id),
   INDEX idx_registration_status (event_id,status,registration_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS venue_requests (
+  request_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  event_id INT UNSIGNED NOT NULL,
+  faculty_id INT UNSIGNED NOT NULL,
+  preferred_venue_id INT UNSIGNED NULL,
+  assigned_venue_id INT UNSIGNED NULL,
+  event_size INT NOT NULL,
+  required_resources TEXT NOT NULL,
+  event_category ENUM('lecture','workshop','seminar','competition','cultural') NOT NULL DEFAULT 'workshop',
+  priority_level ENUM('normal','high','urgent') NOT NULL DEFAULT 'normal',
+  accessibility_needed TINYINT(1) NOT NULL DEFAULT 0,
+  av_support_needed TINYINT(1) NOT NULL DEFAULT 0,
+  setup_minutes INT NOT NULL DEFAULT 15,
+  faculty_notes TEXT NULL,
+  queue_status ENUM('queued','assigned','declined') NOT NULL DEFAULT 'queued',
+  admin_notes TEXT NULL,
+  reviewed_by INT UNSIGNED NULL,
+  reviewed_at TIMESTAMP NULL DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_vr_event FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
+  CONSTRAINT fk_vr_faculty FOREIGN KEY (faculty_id) REFERENCES users(user_id) ON DELETE RESTRICT,
+  CONSTRAINT fk_vr_pref_venue FOREIGN KEY (preferred_venue_id) REFERENCES venues(venue_id) ON DELETE SET NULL,
+  CONSTRAINT fk_vr_assigned_venue FOREIGN KEY (assigned_venue_id) REFERENCES venues(venue_id) ON DELETE SET NULL,
+  CONSTRAINT fk_vr_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(user_id) ON DELETE SET NULL,
+  CONSTRAINT chk_vr_size CHECK (event_size > 0),
+  CONSTRAINT chk_vr_setup CHECK (setup_minutes >= 0 AND setup_minutes <= 180),
+  CONSTRAINT uq_vr_event UNIQUE (event_id),
+  INDEX idx_vr_status_created (queue_status,created_at),
+  INDEX idx_vr_faculty (faculty_id,queue_status)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS event_tasks (

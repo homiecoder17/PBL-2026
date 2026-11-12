@@ -38,6 +38,12 @@ import {
 import { signInput, saveSignedRun } from "./scheduling-store.js";
 import { REPORTS, EVENT_LIST, EVENT_LIST_GROUP_BY } from "./reports.js";
 import { createUser, changePassword } from "./accounts.js";
+import {
+  RESOURCE_OPTIONS,
+  EVENT_CATEGORIES,
+  PRIORITY_LEVELS,
+  evaluateVenueMatches,
+} from "./venue-matcher.js";
 
 export async function createApp(overrides = {}) {
   const config = loadConfig(overrides),
@@ -122,6 +128,16 @@ export async function createApp(overrides = {}) {
       if (!req.user) delete req.session.userId;
     }
     res.locals.user = req.user;
+    res.locals.queuedVenueRequests =
+      req.user && req.user.role === "admin"
+        ? Number(
+            (
+              await db.query(
+                "SELECT COUNT(*) n FROM venue_requests WHERE queue_status='queued'",
+              )
+            )[0].n,
+          )
+        : 0;
     next();
   });
   app.use(verifyCsrf);
@@ -172,9 +188,20 @@ export async function createApp(overrides = {}) {
     res.clearCookie("campusflow.sid", { path: "/" });
     res.redirect("/login");
   });
+  async function activeQueueRankMap() {
+    const rows = await db.query(
+      `SELECT request_id
+       FROM venue_requests
+       WHERE queue_status='queued'
+       ORDER BY CASE priority_level WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, request_id ASC`,
+    );
+    return new Map(rows.map((r, i) => [r.request_id, { position: i + 1, total: rows.length }]));
+  }
+
   app.get("/dashboard", loginRequired, async (req, res) => {
     const scalar = async (sql, p = []) => Number((await db.query(sql, p))[0].n);
     const isAdmin = req.user.role === "admin";
+    const isFaculty = req.user.role === "faculty";
     const stats = isAdmin
       ? {
           events: await scalar(
@@ -183,21 +210,46 @@ export async function createApp(overrides = {}) {
           venues: await scalar("SELECT COUNT(*) n FROM venues"),
           registrations: await scalar("SELECT COUNT(*) n FROM registrations"),
           runs: await scalar("SELECT COUNT(*) n FROM scheduling_runs"),
+          queuedRequests: await scalar(
+            "SELECT COUNT(*) n FROM venue_requests WHERE queue_status='queued'",
+          ),
         }
-      : {
-          events: await scalar(
-            "SELECT COUNT(*) n FROM events WHERE status != 'cancelled'",
-          ),
-          venues: await scalar("SELECT COUNT(*) n FROM venues"),
-          registrations: await scalar(
-            "SELECT COUNT(*) n FROM registrations WHERE user_id=? AND status='confirmed'",
-            [req.user.user_id],
-          ),
-          waitlisted: await scalar(
-            "SELECT COUNT(*) n FROM registrations WHERE user_id=? AND status='waitlisted'",
-            [req.user.user_id],
-          ),
-        };
+      : isFaculty
+        ? {
+            myEvents: await scalar(
+              "SELECT COUNT(*) n FROM events WHERE created_by=? AND status != 'cancelled'",
+              [req.user.user_id],
+            ),
+            queuedRequests: await scalar(
+              "SELECT COUNT(*) n FROM venue_requests WHERE faculty_id=? AND queue_status='queued'",
+              [req.user.user_id],
+            ),
+            assignedRequests: await scalar(
+              "SELECT COUNT(*) n FROM venue_requests WHERE faculty_id=? AND queue_status='assigned'",
+              [req.user.user_id],
+            ),
+            totalAttendees: await scalar(
+              `SELECT COUNT(*) n
+               FROM registrations r
+               INNER JOIN events e ON r.event_id = e.event_id
+               WHERE e.created_by=? AND r.status='confirmed'`,
+              [req.user.user_id],
+            ),
+          }
+        : {
+            events: await scalar(
+              "SELECT COUNT(*) n FROM events WHERE status != 'cancelled'",
+            ),
+            venues: await scalar("SELECT COUNT(*) n FROM venues"),
+            registrations: await scalar(
+              "SELECT COUNT(*) n FROM registrations WHERE user_id=? AND status='confirmed'",
+              [req.user.user_id],
+            ),
+            waitlisted: await scalar(
+              "SELECT COUNT(*) n FROM registrations WHERE user_id=? AND status='waitlisted'",
+              [req.user.user_id],
+            ),
+          };
     const allEvents = await db.query(
       `${EVENT_LIST} WHERE e.status != 'cancelled' ${EVENT_LIST_GROUP_BY} ORDER BY e.event_date, e.start_time, e.event_id`,
     );
@@ -213,18 +265,34 @@ export async function createApp(overrides = {}) {
     const venueUtilization = isAdmin
       ? await db.query(REPORTS.venue_utilization.sql)
       : [];
-    const myRegistrations = isAdmin
-      ? []
-      : await db.query(
-          `SELECT r.status AS registration_status, e.event_id, e.title, e.event_date, e.start_time, e.end_time, v.venue_name
-           FROM registrations r
-           INNER JOIN events e ON r.event_id = e.event_id
-           INNER JOIN venues v ON e.venue_id = v.venue_id
-           WHERE r.user_id = ? AND e.status != 'cancelled'
-           ORDER BY e.event_date, e.start_time
+    const myRegistrations =
+      isAdmin || isFaculty
+        ? []
+        : await db.query(
+            `SELECT r.status AS registration_status, e.event_id, e.title, e.event_date, e.start_time, e.end_time, v.venue_name
+             FROM registrations r
+             INNER JOIN events e ON r.event_id = e.event_id
+             INNER JOIN venues v ON e.venue_id = v.venue_id
+             WHERE r.user_id = ? AND e.status != 'cancelled'
+             ORDER BY e.event_date, e.start_time
+             LIMIT 4`,
+            [req.user.user_id],
+          );
+    const myQueueRequests = isFaculty
+      ? await db.query(
+          `SELECT vr.*, e.title, e.event_date, e.start_time, e.end_time, e.status AS event_status,
+            pv.venue_name AS preferred_venue_name, av.venue_name AS assigned_venue_name
+           FROM venue_requests vr
+           INNER JOIN events e ON vr.event_id = e.event_id
+           LEFT JOIN venues pv ON vr.preferred_venue_id = pv.venue_id
+           LEFT JOIN venues av ON vr.assigned_venue_id = av.venue_id
+           WHERE vr.faculty_id = ?
+           ORDER BY CASE vr.queue_status WHEN 'queued' THEN 0 WHEN 'assigned' THEN 1 ELSE 2 END, vr.request_id DESC
            LIMIT 4`,
           [req.user.user_id],
-        );
+        )
+      : [];
+    const queueRanks = isFaculty ? await activeQueueRankMap() : new Map();
 
     res.render("dashboard", {
       stats,
@@ -234,6 +302,8 @@ export async function createApp(overrides = {}) {
       venues,
       venueUtilization,
       myRegistrations,
+      myQueueRequests,
+      queueRanks,
       today: now.slice(0, 10),
     });
   });
@@ -321,7 +391,7 @@ export async function createApp(overrides = {}) {
       r.registration_open = `${r.event_date} ${r.start_time}` > now;
     res.render("registrations", { registrations });
   });
-  app.get("/events/:id/attendees", ...roleRequired("admin"), async (req, res) => {
+  app.get("/events/:id/attendees", ...roleRequired("admin", "faculty"), async (req, res) => {
     const eventId = id(req.params.id);
     const event = (
       await db.query(
@@ -343,7 +413,7 @@ export async function createApp(overrides = {}) {
   });
   app.post(
     "/events/:id/attendees/:regId/checkin",
-    ...roleRequired("admin"),
+    ...roleRequired("admin", "faculty"),
     async (req, res) => {
       const eventId = id(req.params.id);
       const regId = id(req.params.regId);
@@ -361,7 +431,7 @@ export async function createApp(overrides = {}) {
       res.redirect(`/events/${eventId}/attendees`);
     },
   );
-  app.get("/events/:id/attendees.csv", ...roleRequired("admin"), async (req, res) => {
+  app.get("/events/:id/attendees.csv", ...roleRequired("admin", "faculty"), async (req, res) => {
     const eventId = id(req.params.id);
     const event = (
       await db.query("SELECT event_id, title FROM events WHERE event_id=?", [
@@ -511,6 +581,223 @@ export async function createApp(overrides = {}) {
     }
     res.redirect("/venues");
   });
+
+  app.get("/faculty", ...roleRequired("faculty"), async (req, res) => {
+    const allEvents = await db.query(
+      `${EVENT_LIST} WHERE e.status != 'cancelled' ${EVENT_LIST_GROUP_BY} ORDER BY e.event_date, e.start_time, e.event_id`,
+    );
+    const myEvents = await db.query(
+      `${EVENT_LIST} WHERE e.created_by = ? ${EVENT_LIST_GROUP_BY} ORDER BY e.event_date, e.start_time, e.event_id`,
+      [req.user.user_id],
+    );
+    const myRequests = await db.query(
+      `SELECT vr.*, e.title, e.event_date, e.start_time, e.end_time, e.expected_attendance, e.status AS event_status,
+        pv.venue_name AS preferred_venue_name, av.venue_name AS assigned_venue_name
+       FROM venue_requests vr
+       INNER JOIN events e ON vr.event_id = e.event_id
+       LEFT JOIN venues pv ON vr.preferred_venue_id = pv.venue_id
+       LEFT JOIN venues av ON vr.assigned_venue_id = av.venue_id
+       WHERE vr.faculty_id = ?
+       ORDER BY CASE vr.queue_status WHEN 'queued' THEN 0 WHEN 'declined' THEN 1 ELSE 2 END, vr.request_id DESC`,
+      [req.user.user_id],
+    );
+    const reqByEventId = new Map(myRequests.map((r) => [r.event_id, r]));
+    const unqueuedPendingEvents = myEvents.filter(
+      (ev) => ev.status === "pending_schedule" && !reqByEventId.has(ev.event_id),
+    );
+    const queueRanks = await activeQueueRankMap();
+    const venues = await db.query("SELECT * FROM venues ORDER BY capacity ASC, venue_name");
+
+    res.render("faculty-portal", {
+      allEvents,
+      myEvents,
+      myRequests,
+      unqueuedPendingEvents,
+      queueRanks,
+      venues,
+      resourceOptions: RESOURCE_OPTIONS,
+      eventCategories: EVENT_CATEGORIES,
+      priorityLevels: PRIORITY_LEVELS,
+      stats: {
+        myEventsCount: myEvents.filter((e) => e.status !== "cancelled").length,
+        queuedCount: myRequests.filter((r) => r.queue_status === "queued").length,
+        assignedCount: myRequests.filter((r) => r.queue_status === "assigned").length,
+        totalAttendees: myEvents.reduce(
+          (sum, ev) => sum + Number(ev.registration_count || 0),
+          0,
+        ),
+      },
+    });
+  });
+
+  app.get("/faculty/events/new", ...roleRequired("faculty"), async (req, res) => {
+    const venues = await db.query("SELECT * FROM venues ORDER BY capacity ASC, venue_name");
+    res.render("faculty-event-form", {
+      form: {
+        event_date: req.query.date || "",
+        setup_minutes: "15",
+        event_category: "workshop",
+        priority_level: "normal",
+        required_resources: ["Projector"],
+      },
+      venues,
+      resourceOptions: RESOURCE_OPTIONS,
+      eventCategories: EVENT_CATEGORIES,
+      priorityLevels: PRIORITY_LEVELS,
+      today: campusNow(config.campusTimezone).slice(0, 10),
+    });
+  });
+
+  app.post("/faculty/events/new", ...roleRequired("faculty"), async (req, res) => {
+    try {
+      await services.submitFacultyEventAndQueue(req.body, req.user.user_id);
+      flash(
+        req,
+        "success",
+        "Event registered and placed in the campus venue assignment queue.",
+      );
+      return res.redirect("/faculty");
+    } catch (error) {
+      if (!(error instanceof UserError)) throw error;
+      notify(res, error);
+      const venues = await db.query("SELECT * FROM venues ORDER BY capacity ASC, venue_name");
+      return res.render("faculty-event-form", {
+        form: req.body,
+        venues,
+        resourceOptions: RESOURCE_OPTIONS,
+        eventCategories: EVENT_CATEGORIES,
+        priorityLevels: PRIORITY_LEVELS,
+        today: campusNow(config.campusTimezone).slice(0, 10),
+      });
+    }
+  });
+
+  app.post("/faculty/queue", ...roleRequired("faculty"), async (req, res) => {
+    try {
+      const eventId = id(req.body.event_id);
+      await services.enqueueEventForVenue(eventId, req.body, req.user.user_id);
+      flash(req, "success", "Event added to the campus venue queue.");
+    } catch (error) {
+      if (!(error instanceof UserError)) throw error;
+      flash(req, "danger", error.message);
+    }
+    res.redirect("/faculty");
+  });
+
+  app.post(
+    "/faculty/queue/:id/withdraw",
+    ...roleRequired("faculty"),
+    async (req, res) => {
+      try {
+        await services.withdrawVenueRequest(id(req.params.id), req.user.user_id);
+        flash(req, "success", "Venue queue request withdrawn.");
+      } catch (error) {
+        if (!(error instanceof UserError)) throw error;
+        flash(req, "danger", error.message);
+      }
+      res.redirect("/faculty");
+    },
+  );
+
+  app.get("/venues/assign", ...roleRequired("admin"), async (req, res) => {
+    const strictResources = req.query.strict_resources === "1";
+    const enforceBuffer = req.query.enforce_buffer === "1";
+    const rawHeadroom = Number(req.query.min_headroom || 0);
+    const minHeadroomPct = [0, 10, 20].includes(rawHeadroom) ? rawHeadroom : 0;
+
+    const queuedRequests = await db.query(
+      `SELECT vr.*, e.title, e.description, e.event_date, e.start_time, e.end_time, e.expected_attendance, e.status AS event_status,
+        u.name AS faculty_name, u.email AS faculty_email, u.student_id AS faculty_code,
+        pv.venue_name AS preferred_venue_name, pv.capacity AS preferred_venue_capacity
+       FROM venue_requests vr
+       INNER JOIN events e ON vr.event_id = e.event_id
+       INNER JOIN users u ON vr.faculty_id = u.user_id
+       LEFT JOIN venues pv ON vr.preferred_venue_id = pv.venue_id
+       WHERE vr.queue_status = 'queued' AND e.status != 'cancelled'
+       ORDER BY CASE vr.priority_level WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, vr.request_id ASC`,
+    );
+
+    const recentRequests = await db.query(
+      `SELECT vr.*, e.title, e.event_date, e.start_time, e.end_time,
+        u.name AS faculty_name, av.venue_name AS assigned_venue_name, rv.name AS reviewer_name
+       FROM venue_requests vr
+       INNER JOIN events e ON vr.event_id = e.event_id
+       INNER JOIN users u ON vr.faculty_id = u.user_id
+       LEFT JOIN venues av ON vr.assigned_venue_id = av.venue_id
+       LEFT JOIN users rv ON vr.reviewed_by = rv.user_id
+       WHERE vr.queue_status IN ('assigned','declined')
+       ORDER BY vr.reviewed_at DESC, vr.request_id DESC
+       LIMIT 20`,
+    );
+
+    const venues = await db.query("SELECT * FROM venues ORDER BY capacity ASC, venue_name");
+    const scheduledEvents = await db.query(
+      "SELECT event_id, title, venue_id, event_date, start_time, end_time, status FROM events WHERE status='scheduled'",
+    );
+
+    const evaluatedQueue = queuedRequests.map((item, idx) => {
+      const match = evaluateVenueMatches(item, venues, scheduledEvents, {
+        strictResources,
+        enforceBuffer,
+        minHeadroomPct,
+      });
+      return {
+        ...item,
+        queuePosition: idx + 1,
+        candidates: match.candidates,
+        recommendedVenueId: match.recommendedVenueId,
+      };
+    });
+
+    res.render("venue-assign", {
+      queue: evaluatedQueue,
+      recentRequests,
+      venues,
+      filters: {
+        strictResources,
+        enforceBuffer,
+        minHeadroomPct,
+      },
+    });
+  });
+
+  app.post("/venues/assign/:id", ...roleRequired("admin"), async (req, res) => {
+    try {
+      const outcome = await services.assignVenueToRequest(
+        id(req.params.id),
+        req.body,
+        req.user.user_id,
+      );
+      flash(
+        req,
+        "success",
+        `Assigned ${outcome.venueName} to "${outcome.eventTitle}" and opened event registrations.`,
+      );
+    } catch (error) {
+      if (!(error instanceof UserError)) throw error;
+      flash(req, "danger", error.message);
+    }
+    res.redirect("/venues/assign");
+  });
+
+  app.post(
+    "/venues/assign/:id/decline",
+    ...roleRequired("admin"),
+    async (req, res) => {
+      try {
+        await services.declineVenueRequest(
+          id(req.params.id),
+          req.body.admin_notes,
+          req.user.user_id,
+        );
+        flash(req, "success", "Returned request to faculty with review notes.");
+      } catch (error) {
+        if (!(error instanceof UserError)) throw error;
+        flash(req, "danger", error.message);
+      }
+      res.redirect("/venues/assign");
+    },
+  );
 
   async function simulator(req, res) {
     const venues = await db.query("SELECT * FROM venues ORDER BY venue_name");
@@ -756,10 +1043,13 @@ export async function createApp(overrides = {}) {
 
   app.post("/users", ...roleRequired("admin"), async (req, res) => {
     try {
+      const requestedRole = ["admin", "faculty", "student"].includes(req.body.role)
+        ? req.body.role
+        : "student";
       await createUser(db, {
         name: req.body.name,
         email: req.body.email,
-        role: req.body.role === "admin" ? "admin" : "student",
+        role: requestedRole,
         studentId: req.body.student_id || null,
         password: req.body.password,
       });

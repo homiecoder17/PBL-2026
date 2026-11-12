@@ -1,0 +1,128 @@
+<%- include('partials/header',{title:'Register event',active:'faculty-new'}) %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">FACULTY EVENT REGISTRATION</p>
+    <h1>Register event &amp; join venue queue<span class="heading-period">.</span></h1>
+    <p class="muted">Provide your event schedule, expected attendance size, and room needs. Your event will enter the venue queue for hall assignment.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/faculty">Back to Faculty Hub</a>
+</div>
+
+<form method="post" class="panel form-panel">
+  <input type="hidden" name="csrf_token" value="<%= csrf %>">
+  <%
+    const selectedRes = Array.isArray(form.required_resources)
+      ? form.required_resources
+      : String(form.required_resources || '').split(',').map((s) => s.trim()).filter(Boolean);
+  %>
+  <div class="row g-4">
+    <div class="col-12">
+      <p class="eyebrow mb-1">1. EVENT INFORMATION</p>
+      <h2 class="h5 mb-0">Schedule &amp; capacity details</h2>
+    </div>
+
+    <div class="col-12">
+      <label class="form-label" for="title">Event title</label>
+      <input class="form-control" id="title" name="title" required maxlength="150" value="<%= form.title || '' %>" placeholder="e.g. Embedded Systems Faculty Workshop">
+    </div>
+    <div class="col-12">
+      <label class="form-label" for="description">Description</label>
+      <textarea class="form-control" id="description" name="description" required maxlength="5000" rows="3" placeholder="Describe topics, target student groups, and agenda."><%= form.description || '' %></textarea>
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label" for="event_date">Event date</label>
+      <input class="form-control" id="event_date" name="event_date" type="date" required min="<%= today %>" value="<%= form.event_date || '' %>">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="start_time">Start time</label>
+      <input class="form-control" id="start_time" name="start_time" type="time" required value="<%= clock(form.start_time) %>">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="end_time">End time</label>
+      <input class="form-control" id="end_time" name="end_time" type="time" required value="<%= clock(form.end_time) %>">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="expected_attendance">Expected event size</label>
+      <input class="form-control" id="expected_attendance" name="expected_attendance" type="number" min="1" max="1000000" required value="<%= form.expected_attendance || '' %>" placeholder="e.g. 65">
+    </div>
+
+    <div class="col-12 pt-2 border-top">
+      <p class="eyebrow mb-1">2. VENUE QUEUE PARAMETERS</p>
+      <h2 class="h5 mb-0">Requirements for hall matching</h2>
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label" for="preferred_venue_id">Preferred hall (optional)</label>
+      <select class="form-select" id="preferred_venue_id" name="preferred_venue_id">
+        <option value="any" <%= (!form.preferred_venue_id || form.preferred_venue_id === 'any') ? 'selected' : '' %>>No preference (best available match)</option>
+        <% for (const v of venues) { %>
+          <option value="<%= v.venue_id %>" <%= String(form.preferred_venue_id) === String(v.venue_id) ? 'selected' : '' %>><%= v.venue_name %> · <%= v.capacity %> seats</option>
+        <% } %>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="event_category">Event category</label>
+      <select class="form-select" id="event_category" name="event_category">
+        <% for (const cat of eventCategories) { %>
+          <option value="<%= cat.value %>" <%= form.event_category === cat.value ? 'selected' : '' %>><%= cat.label %></option>
+        <% } %>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="priority_level">Queue priority</label>
+      <select class="form-select" id="priority_level" name="priority_level">
+        <% for (const p of priorityLevels) { %>
+          <option value="<%= p.value %>" <%= form.priority_level === p.value ? 'selected' : '' %>><%= p.label %></option>
+        <% } %>
+      </select>
+    </div>
+
+    <div class="col-md-8">
+      <span class="form-label d-block">Required room equipment &amp; facilities</span>
+      <div class="resource-check-grid">
+        <% for (const resOpt of resourceOptions) { %>
+          <label class="resource-check-pill">
+            <input type="checkbox" name="required_resources" value="<%= resOpt %>" <%= selectedRes.includes(resOpt) ? 'checked' : '' %>>
+            <span><%= resOpt %></span>
+          </label>
+        <% } %>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="setup_minutes">Pre-event setup buffer (minutes)</label>
+      <input class="form-control" id="setup_minutes" name="setup_minutes" type="number" min="0" max="180" value="<%= form.setup_minutes ?? 15 %>">
+      <div class="mt-3 d-flex flex-column gap-2">
+        <label class="form-check">
+          <input class="form-check-input" type="checkbox" name="av_support_needed" value="1" <%= form.av_support_needed ? 'checked' : '' %>>
+          <span class="form-check-label">AV technical support requested</span>
+        </label>
+        <label class="form-check">
+          <input class="form-check-input" type="checkbox" name="accessibility_needed" value="1" <%= form.accessibility_needed ? 'checked' : '' %>>
+          <span class="form-check-label">Step-free / accessible hall entrance</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label" for="custom_resources">Additional equipment (optional)</label>
+      <input class="form-control" id="custom_resources" name="custom_resources" maxlength="200" value="<%= form.custom_resources || '' %>" placeholder="e.g. Dual monitors, podium, lab LAN">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label" for="faculty_notes">Special instructions for Campus Admin</label>
+      <input class="form-control" id="faculty_notes" name="faculty_notes" maxlength="1000" value="<%= form.faculty_notes || '' %>" placeholder="e.g. Guest speaker arrives 20 mins early">
+    </div>
+
+    <div class="col-12">
+      <div class="notice">
+        Once submitted, your event enters the venue assignment queue immediately. Campus Administration assigns the best available hall matching your event size and equipment needs, opening student registrations automatically.
+      </div>
+    </div>
+
+    <div class="col-12 d-flex gap-2 flex-wrap">
+      <button class="btn btn-primary">Register event &amp; join venue queue</button>
+      <a class="btn btn-outline-secondary" href="/faculty">Cancel</a>
+    </div>
+  </div>
+</form>
+<%- include('partials/footer') %>

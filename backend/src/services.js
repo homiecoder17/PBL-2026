@@ -5,6 +5,10 @@ import {
   parseProcesses,
   schedule,
 } from "./scheduler.js";
+import {
+  evaluateVenueMatches,
+  parseResourceTags,
+} from "./venue-matcher.js";
 export class UserError extends Error {}
 export function integer(value, label, minimum = 1, maximum = 1_000_000) {
   if (
@@ -572,6 +576,389 @@ export function createServices(db, config) {
       };
     });
   }
+  function queueRequestFields(form) {
+    const rawPreferred =
+      typeof form.preferred_venue_id === "string"
+        ? form.preferred_venue_id.trim()
+        : form.preferred_venue_id;
+    const preferredVenueId =
+      rawPreferred && rawPreferred !== "any"
+        ? integer(rawPreferred, "Preferred venue")
+        : null;
+    const eventCategory = form.event_category || "workshop";
+    if (
+      !["lecture", "workshop", "seminar", "competition", "cultural"].includes(
+        eventCategory,
+      )
+    ) {
+      throw new UserError("Invalid event category.");
+    }
+    const priorityLevel = form.priority_level || "normal";
+    if (!["normal", "high", "urgent"].includes(priorityLevel)) {
+      throw new UserError("Invalid priority level.");
+    }
+    const rawSetup =
+      form.setup_minutes === undefined || String(form.setup_minutes).trim() === ""
+        ? 15
+        : form.setup_minutes;
+    const setupMinutes = integer(rawSetup, "Setup buffer (minutes)", 0, 180);
+    const resourceTags = [
+      ...parseResourceTags(form.required_resources),
+      ...parseResourceTags(form.custom_resources),
+    ];
+    const requiredResources = resourceTags.length
+      ? [...new Set(resourceTags)].join(", ").slice(0, 1000)
+      : "Standard seating";
+    const facultyNotes =
+      typeof form.faculty_notes === "string" && form.faculty_notes.trim()
+        ? form.faculty_notes.trim().slice(0, 1000)
+        : null;
+    return {
+      preferredVenueId,
+      eventCategory,
+      priorityLevel,
+      setupMinutes,
+      requiredResources,
+      accessibilityNeeded: form.accessibility_needed ? 1 : 0,
+      avSupportNeeded: form.av_support_needed ? 1 : 0,
+      facultyNotes,
+    };
+  }
+
+  async function submitFacultyEventAndQueue(form, facultyId) {
+    const q = queueRequestFields(form);
+    return db.transaction(async (conn) => {
+      const venues = await execute(
+        conn,
+        "SELECT venue_id, venue_name, capacity FROM venues ORDER BY capacity ASC, venue_id ASC FOR UPDATE",
+      );
+      if (!venues.length)
+        throw new UserError("No campus venues are configured yet.");
+
+      const attendance = integer(form.expected_attendance, "Expected attendance");
+      let placeholderVenue = null;
+      if (q.preferredVenueId) {
+        placeholderVenue = venues.find((v) => v.venue_id === q.preferredVenueId);
+        if (!placeholderVenue)
+          throw new UserError("Selected preferred venue does not exist.");
+        if (attendance > placeholderVenue.capacity) {
+          throw new UserError(
+            `Expected attendance (${attendance}) exceeds ${placeholderVenue.venue_name} capacity (${placeholderVenue.capacity} seats). Choose another preferred hall or select "No preference".`,
+          );
+        }
+      } else {
+        placeholderVenue = venues.find((v) => v.capacity >= attendance);
+        if (!placeholderVenue) {
+          const maxCap = venues[venues.length - 1].capacity;
+          throw new UserError(
+            `Expected attendance (${attendance}) exceeds the largest campus hall capacity (${maxCap} seats).`,
+          );
+        }
+      }
+
+      const data = eventFields(
+        {
+          ...form,
+          venue_id: String(placeholderVenue.venue_id),
+          status: "pending_schedule",
+        },
+        config.campusTimezone,
+      );
+
+      const evRes = await execute(
+        conn,
+        "INSERT INTO events (title,description,event_date,start_time,end_time,expected_attendance,venue_id,status,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
+        [
+          data.title,
+          data.description,
+          data.event_date,
+          data.start_time,
+          data.end_time,
+          data.expected_attendance,
+          placeholderVenue.venue_id,
+          "pending_schedule",
+          facultyId,
+        ],
+      );
+      const eventId = evRes.insertId;
+      const vrRes = await execute(
+        conn,
+        `INSERT INTO venue_requests
+          (event_id, faculty_id, preferred_venue_id, event_size, required_resources, event_category, priority_level, accessibility_needed, av_support_needed, setup_minutes, faculty_notes, queue_status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,'queued')`,
+        [
+          eventId,
+          facultyId,
+          q.preferredVenueId,
+          data.expected_attendance,
+          q.requiredResources,
+          q.eventCategory,
+          q.priorityLevel,
+          q.accessibilityNeeded,
+          q.avSupportNeeded,
+          q.setupMinutes,
+          q.facultyNotes,
+        ],
+      );
+      return { eventId, requestId: vrRes.insertId };
+    });
+  }
+
+  async function enqueueEventForVenue(eventId, form, facultyId) {
+    const q = queueRequestFields(form);
+    return db.transaction(async (conn) => {
+      const ev = (
+        await execute(
+          conn,
+          "SELECT * FROM events WHERE event_id=? FOR UPDATE",
+          [eventId],
+        )
+      )[0];
+      if (!ev) throw new UserError("Event no longer exists.");
+      if (Number(ev.created_by) !== Number(facultyId)) {
+        throw new UserError("You can only manage venue queue requests for your own events.");
+      }
+      if (ev.status !== "pending_schedule") {
+        throw new UserError(
+          "Only events awaiting venue assignment can enter the queue.",
+        );
+      }
+      if (`${ev.event_date} ${ev.start_time}:00` <= campusNow(config.campusTimezone)) {
+        throw new UserError("Cannot queue an event whose start time has already passed.");
+      }
+
+      const venues = await execute(
+        conn,
+        "SELECT venue_id, venue_name, capacity FROM venues ORDER BY capacity ASC FOR UPDATE",
+      );
+      if (q.preferredVenueId) {
+        const pref = venues.find((v) => v.venue_id === q.preferredVenueId);
+        if (!pref) throw new UserError("Selected preferred venue does not exist.");
+        if (ev.expected_attendance > pref.capacity) {
+          throw new UserError(
+            `Event size (${ev.expected_attendance}) exceeds ${pref.venue_name} capacity (${pref.capacity}).`,
+          );
+        }
+      }
+
+      const existingReq = (
+        await execute(
+          conn,
+          "SELECT request_id, queue_status FROM venue_requests WHERE event_id=? FOR UPDATE",
+          [eventId],
+        )
+      )[0];
+      if (existingReq) {
+        if (existingReq.queue_status === "assigned") {
+          throw new UserError("This event already has an assigned venue.");
+        }
+        await execute(
+          conn,
+          `UPDATE venue_requests
+           SET preferred_venue_id=?, assigned_venue_id=NULL, event_size=?, required_resources=?, event_category=?, priority_level=?,
+               accessibility_needed=?, av_support_needed=?, setup_minutes=?, faculty_notes=?, queue_status='queued',
+               admin_notes=NULL, reviewed_by=NULL, reviewed_at=NULL
+           WHERE request_id=?`,
+          [
+            q.preferredVenueId,
+            ev.expected_attendance,
+            q.requiredResources,
+            q.eventCategory,
+            q.priorityLevel,
+            q.accessibilityNeeded,
+            q.avSupportNeeded,
+            q.setupMinutes,
+            q.facultyNotes,
+            existingReq.request_id,
+          ],
+        );
+        return existingReq.request_id;
+      }
+
+      const ins = await execute(
+        conn,
+        `INSERT INTO venue_requests
+          (event_id, faculty_id, preferred_venue_id, event_size, required_resources, event_category, priority_level, accessibility_needed, av_support_needed, setup_minutes, faculty_notes, queue_status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,'queued')`,
+        [
+          eventId,
+          facultyId,
+          q.preferredVenueId,
+          ev.expected_attendance,
+          q.requiredResources,
+          q.eventCategory,
+          q.priorityLevel,
+          q.accessibilityNeeded,
+          q.avSupportNeeded,
+          q.setupMinutes,
+          q.facultyNotes,
+        ],
+      );
+      return ins.insertId;
+    });
+  }
+
+  async function withdrawVenueRequest(requestId, facultyId) {
+    return db.transaction(async (conn) => {
+      const reqRow = (
+        await execute(
+          conn,
+          "SELECT request_id, faculty_id, queue_status FROM venue_requests WHERE request_id=? FOR UPDATE",
+          [requestId],
+        )
+      )[0];
+      if (!reqRow) throw new UserError("Queue request no longer exists.");
+      if (Number(reqRow.faculty_id) !== Number(facultyId)) {
+        throw new UserError("You can only withdraw your own queue requests.");
+      }
+      if (reqRow.queue_status !== "queued") {
+        throw new UserError("Only pending queued requests can be withdrawn.");
+      }
+      await execute(conn, "DELETE FROM venue_requests WHERE request_id=?", [
+        requestId,
+      ]);
+    });
+  }
+
+  async function assignVenueToRequest(requestId, form, adminId) {
+    const venueId = integer(form.venue_id, "Assigned venue");
+    const enforceBuffer = Boolean(form.enforce_buffer);
+    const adminNotes =
+      typeof form.admin_notes === "string" && form.admin_notes.trim()
+        ? form.admin_notes.trim().slice(0, 1000)
+        : null;
+
+    return db.transaction(async (conn) => {
+      const reqRow = (
+        await execute(
+          conn,
+          "SELECT * FROM venue_requests WHERE request_id=? FOR UPDATE",
+          [requestId],
+        )
+      )[0];
+      if (!reqRow) throw new UserError("Venue request no longer exists.");
+      if (reqRow.queue_status !== "queued") {
+        throw new UserError("This venue request is no longer in the active queue.");
+      }
+
+      const ev = (
+        await execute(
+          conn,
+          "SELECT * FROM events WHERE event_id=? FOR UPDATE",
+          [reqRow.event_id],
+        )
+      )[0];
+      if (!ev || ev.status === "cancelled") {
+        throw new UserError("Associated event is cancelled or missing.");
+      }
+
+      const venue = (
+        await execute(
+          conn,
+          "SELECT * FROM venues WHERE venue_id=? FOR UPDATE",
+          [venueId],
+        )
+      )[0];
+      if (!venue) throw new UserError("Selected venue does not exist.");
+      if (Number(venue.capacity) < Number(ev.expected_attendance)) {
+        throw new UserError(
+          `${venue.venue_name} capacity (${venue.capacity}) is smaller than the event size (${ev.expected_attendance}).`,
+        );
+      }
+
+      const sameDayScheduled = await execute(
+        conn,
+        `SELECT event_id, venue_id, title, event_date, start_time, end_time, status
+         FROM events
+         WHERE venue_id=? AND event_date=? AND status='scheduled' AND event_id <> ?
+         FOR UPDATE`,
+        [venueId, ev.event_date, ev.event_id],
+      );
+
+      const assessment = evaluateVenueMatches(
+        { ...reqRow, ...ev },
+        [venue],
+        sameDayScheduled,
+        { enforceBuffer },
+      ).candidates[0];
+
+      if (!assessment.available) {
+        const clash = assessment.conflicts[0];
+        throw new UserError(
+          `Venue unavailable: ${venue.venue_name} already hosts "${clash.title}" (${clash.start_time}–${clash.end_time}) on ${ev.event_date}.`,
+        );
+      }
+      if (enforceBuffer && !assessment.bufferClear) {
+        throw new UserError(
+          `Turnover buffer check failed at ${venue.venue_name}: only ${assessment.minGapMinutes} min gap (${reqRow.setup_minutes} min requested).`,
+        );
+      }
+
+      const confirmed = Number(
+        (
+          await execute(
+            conn,
+            "SELECT COUNT(*) n FROM registrations WHERE event_id=? AND status='confirmed'",
+            [ev.event_id],
+          )
+        )[0].n,
+      );
+      if (confirmed > Number(ev.expected_attendance)) {
+        throw new UserError("Confirmed registrations exceed expected attendance limit.");
+      }
+
+      const stamped = new Date().toISOString().slice(0, 19).replace("T", " ");
+      await execute(
+        conn,
+        "UPDATE events SET venue_id=?, status='scheduled' WHERE event_id=?",
+        [venueId, ev.event_id],
+      );
+      await execute(
+        conn,
+        `UPDATE venue_requests
+         SET assigned_venue_id=?, queue_status='assigned', admin_notes=?, reviewed_by=?, reviewed_at=?
+         WHERE request_id=?`,
+        [venueId, adminNotes, adminId, stamped, requestId],
+      );
+
+      return {
+        eventId: ev.event_id,
+        eventTitle: ev.title,
+        venueName: venue.venue_name,
+      };
+    });
+  }
+
+  async function declineVenueRequest(requestId, rawReason, adminId) {
+    const reason = text(rawReason, "Feedback / reason", 1000);
+    return db.transaction(async (conn) => {
+      const reqRow = (
+        await execute(
+          conn,
+          "SELECT request_id, event_id, queue_status FROM venue_requests WHERE request_id=? FOR UPDATE",
+          [requestId],
+        )
+      )[0];
+      if (!reqRow) throw new UserError("Venue request no longer exists.");
+      if (reqRow.queue_status !== "queued") {
+        throw new UserError("Only active queued requests can be returned for revision.");
+      }
+      const stamped = new Date().toISOString().slice(0, 19).replace("T", " ");
+      await execute(
+        conn,
+        `UPDATE venue_requests
+         SET queue_status='declined', admin_notes=?, reviewed_by=?, reviewed_at=?
+         WHERE request_id=?`,
+        [reason, adminId, stamped, requestId],
+      );
+      await execute(
+        conn,
+        "UPDATE events SET status='pending_schedule' WHERE event_id=? AND status != 'cancelled'",
+        [reqRow.event_id],
+      );
+    });
+  }
+
   return {
     saveEvent,
     deleteEvent,
@@ -581,5 +968,10 @@ export function createServices(db, config) {
     unregisterStudent,
     toggleCheckIn,
     commitScheduledEvents,
+    submitFacultyEventAndQueue,
+    enqueueEventForVenue,
+    withdrawVenueRequest,
+    assignVenueToRequest,
+    declineVenueRequest,
   };
 }

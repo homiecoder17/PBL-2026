@@ -1,23 +1,24 @@
 <%- include('partials/header',{title:'Overview',active:'dashboard'}) %>
-<% const isAdmin = user.role === 'admin'; %>
+<% const isAdmin = user.role === 'admin'; const isFaculty = user.role === 'faculty'; %>
 <section class="overview-hero">
   <div class="hero-grid" aria-hidden="true"></div>
   <div class="overview-copy">
     <div class="live-pill mb-3">
       <span class="live-beacon" aria-hidden="true"></span>
-      <span><%= isAdmin ? 'Administrator Console' : 'Campus Hub Live' %></span>
+      <span><%= isAdmin ? 'Administrator Console' : (isFaculty ? 'Faculty Portal Live' : 'Campus Hub Live') %></span>
     </div>
     <h1 class="split-heading"><span>Your campus.</span><span>In one <em>place.</em></span></h1>
-    <p>Welcome, <%= user.name %>. <%= isAdmin ? 'Coordinate campus halls, registrations, and conflict-free schedules in real time.' : 'Discover upcoming campus events, reserve your seats, and keep track of your passes.' %></p>
+    <p>Welcome, <%= user.name %>. <%= isAdmin ? 'Coordinate campus halls, venue requests, registrations, and conflict-free schedules in real time.' : (isFaculty ? 'Register new campus events, join the hall assignment queue, and inspect student registrations.' : 'Discover upcoming campus events, reserve your seats, and keep track of your passes.') %></p>
     <div class="d-flex gap-2 flex-wrap">
-      <a class="btn btn-hero" href="<%= isAdmin ? '/events/new' : '/events' %>">
-        <%= isAdmin ? '+ Create event' : 'Browse events' %>
-        <%- include('partials/icon',{name:'arrow'}) %>
-      </a>
-      <% if (!isAdmin) { %>
-        <a class="btn btn-hero-ghost" href="/registrations">My registrations</a>
+      <% if (isAdmin) { %>
+        <a class="btn btn-hero" href="/events/new">+ Create event <%- include('partials/icon',{name:'arrow'}) %></a>
+        <a class="btn btn-hero-ghost" href="/venues/assign">Venue portal (<%= stats.queuedRequests %>)</a>
+      <% } else if (isFaculty) { %>
+        <a class="btn btn-hero" href="/faculty/events/new">+ Register event <%- include('partials/icon',{name:'arrow'}) %></a>
+        <a class="btn btn-hero-ghost" href="/faculty">Open faculty hub</a>
       <% } else { %>
-        <a class="btn btn-hero-ghost" href="/simulator">Open OS Scheduler</a>
+        <a class="btn btn-hero" href="/events">Browse events <%- include('partials/icon',{name:'arrow'}) %></a>
+        <a class="btn btn-hero-ghost" href="/registrations">My registrations</a>
       <% } %>
     </div>
   </div>
@@ -60,16 +61,23 @@
     const metrics = isAdmin
       ? [
           ['Scheduled events', stats.events, 'Active campus events', 'calendar', '/events'],
-          ['Campus venues', stats.venues, 'Available event halls', 'building', '/venues'],
+          ['Venue queue', stats.queuedRequests || 0, stats.queuedRequests ? 'Faculty halls awaiting assignment' : `${stats.venues} campus halls ready`, 'pin', stats.queuedRequests ? '/venues/assign' : '/venues'],
           ['Saved OS runs', stats.runs, '5 scheduling models', 'cpu', '/runs'],
           ['Database engine', dbFallback ? 'SQLite' : 'MySQL 8', dbFallback ? 'Offline relational fallback' : 'InnoDB ACID connected', 'lock', '/reports'],
         ]
-      : [
-          ['Upcoming events', stats.events, 'Open across campus', 'calendar', '/events'],
-          ['My registrations', stats.registrations, stats.waitlisted ? `${stats.waitlisted} waitlisted` : 'Confirmed campus passes', 'ticket', '/registrations'],
-          ['Campus venues', stats.venues, 'Auditoriums & student hubs', 'pin', '/events'],
-          ['Campus pass', 'Active', 'Ready for event entry', 'check', '/registrations'],
-        ];
+      : isFaculty
+        ? [
+            ['My events', stats.myEvents, 'Events organized by you', 'calendar', '/faculty'],
+            ['In venue queue', stats.queuedRequests, 'Awaiting hall confirmation', 'clock', '/faculty'],
+            ['Assigned venues', stats.assignedRequests, 'Confirmed & open for registration', 'building', '/faculty'],
+            ['Total attendees', stats.totalAttendees, 'Confirmed student registrations', 'users', '/events'],
+          ]
+        : [
+            ['Upcoming events', stats.events, 'Open across campus', 'calendar', '/events'],
+            ['My registrations', stats.registrations, stats.waitlisted ? `${stats.waitlisted} waitlisted` : 'Confirmed campus passes', 'ticket', '/registrations'],
+            ['Campus venues', stats.venues, 'Auditoriums & student hubs', 'pin', '/events'],
+            ['Campus pass', 'Active', 'Ready for event entry', 'check', '/registrations'],
+          ];
     for (const m of metrics) {
   %>
     <a href="<%= m[4] %>" class="panel metric text-decoration-none">
@@ -87,7 +95,7 @@
         <div>
           <p class="eyebrow">MONTHLY EVENT CALENDAR</p>
           <h2>Interactive campus schedule<span class="heading-period">.</span></h2>
-          <p class="muted mb-0"><%= isAdmin ? 'Click any date to inspect events and launch the OS CPU scheduler.' : 'Click any date to preview scheduled campus events and seat availability.' %></p>
+          <p class="muted mb-0"><%= isAdmin ? 'Click any date to inspect events and launch the OS CPU scheduler.' : (isFaculty ? 'Click any date to preview campus events or register a new event on that day.' : 'Click any date to preview scheduled campus events and seat availability.') %></p>
         </div>
         <div class="calendar-controls d-flex align-items-center gap-2">
           <button type="button" class="btn btn-outline-secondary btn-sm" id="cal-prev">&larr; Prev</button>
@@ -139,8 +147,47 @@
       <h2>Small processes.<br>Big insights.</h2>
       <p>One workload. Five strategies. Compare FCFS, non-preemptive SJF, SRTF, Priority, and Round Robin side by side.</p>
       <div class="lab-flow" aria-label="Simulation workflow"><span>01<br><strong>Arrive</strong></span><span aria-hidden="true">→</span><span>02<br><strong>Execute</strong></span><span aria-hidden="true">→</span><span>03<br><strong>Measure</strong></span></div>
-      <a class="btn btn-primary" href="/simulator">Open OS Scheduler <%- include('partials/icon',{name:'arrow'}) %></a>
+      <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-primary" href="/simulator">Open OS Scheduler <%- include('partials/icon',{name:'arrow'}) %></a>
+        <a class="btn btn-outline-primary" href="/venues/assign">Venue Portal (<%= stats.queuedRequests || 0 %>)</a>
+      </div>
       <div class="notice">The OS CPU scheduler sequences events without collisions and commits non-overlapping time slots to the database.</div>
+    </section>
+  <% } else if (isFaculty) { %>
+    <section class="panel campus-pass-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">FACULTY VENUE QUEUE</p>
+          <h2>Hall requests.</h2>
+        </div>
+        <a href="/faculty">Open hub ↗</a>
+      </div>
+      <% if (myQueueRequests && myQueueRequests.length) { %>
+        <div class="pass-list mt-2">
+          <% for (const qr of myQueueRequests) { const rank = queueRanks.get(qr.request_id); %>
+            <div class="pass-list-item">
+              <div>
+                <strong><%= qr.title %></strong>
+                <small><%= displayDate(qr.event_date) %> · <%= clock(qr.start_time) %>–<%= clock(qr.end_time) %> · <%= qr.event_size %> seats</small>
+                <% if (qr.queue_status === 'assigned' && qr.assigned_venue_name) { %>
+                  <small class="d-block text-success fw-semibold">Assigned: <%= qr.assigned_venue_name %></small>
+                <% } else if (qr.queue_status === 'queued' && rank) { %>
+                  <small class="d-block muted">Queue #<%= rank.position %> of <%= rank.total %><%= qr.preferred_venue_name ? ` · Prefers ${qr.preferred_venue_name}` : '' %></small>
+                <% } %>
+              </div>
+              <span class="status <%= qr.queue_status === 'assigned' ? 'status-green' : (qr.queue_status === 'queued' ? 'status-amber' : 'status-gray') %>">
+                <%= qr.queue_status === 'assigned' ? 'Assigned' : (qr.queue_status === 'queued' ? 'In queue' : 'Returned') %>
+              </span>
+            </div>
+          <% } %>
+        </div>
+      <% } else { %>
+        <p class="small-note mt-3 mb-3">You have not queued any events for a venue yet. Register your event details and size to enter the assignment queue.</p>
+      <% } %>
+      <div class="d-grid gap-2 mt-auto">
+        <a class="btn btn-primary w-100" href="/faculty/events/new">+ Register new event <%- include('partials/icon',{name:'arrow'}) %></a>
+        <a class="btn btn-outline-primary w-100" href="/faculty">Access registrations &amp; queue</a>
+      </div>
     </section>
   <% } else { %>
     <section class="panel campus-pass-panel">
@@ -224,5 +271,5 @@
   </section>
 <% } %>
 
-<script type="application/json" id="calendar-data"><%- JSON.stringify({ eventsByDate: calendarEvents, today, isAdmin }).replace(/</g, '\\u003c') %></script>
+<script type="application/json" id="calendar-data"><%- JSON.stringify({ eventsByDate: calendarEvents, today, isAdmin, isFaculty }).replace(/</g, '\\u003c') %></script>
 <%- include('partials/footer') %>

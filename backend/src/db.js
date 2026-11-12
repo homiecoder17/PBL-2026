@@ -27,7 +27,7 @@ function initSqliteDatabase(options = {}) {
       email TEXT NOT NULL UNIQUE,
       student_id TEXT UNIQUE,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('student','admin')),
+      role TEXT NOT NULL CHECK (role IN ('student','faculty','admin')),
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -114,7 +114,51 @@ function initSqliteDatabase(options = {}) {
       data TEXT NOT NULL,
       expires_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS venue_requests (
+      request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id INTEGER NOT NULL UNIQUE REFERENCES events(event_id) ON DELETE CASCADE,
+      faculty_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+      preferred_venue_id INTEGER REFERENCES venues(venue_id) ON DELETE SET NULL,
+      assigned_venue_id INTEGER REFERENCES venues(venue_id) ON DELETE SET NULL,
+      event_size INTEGER NOT NULL CHECK (event_size > 0),
+      required_resources TEXT NOT NULL,
+      event_category TEXT NOT NULL DEFAULT 'workshop' CHECK (event_category IN ('lecture','workshop','seminar','competition','cultural')),
+      priority_level TEXT NOT NULL DEFAULT 'normal' CHECK (priority_level IN ('normal','high','urgent')),
+      accessibility_needed INTEGER NOT NULL DEFAULT 0 CHECK (accessibility_needed IN (0,1)),
+      av_support_needed INTEGER NOT NULL DEFAULT 0 CHECK (av_support_needed IN (0,1)),
+      setup_minutes INTEGER NOT NULL DEFAULT 15 CHECK (setup_minutes >= 0 AND setup_minutes <= 180),
+      faculty_notes TEXT DEFAULT NULL,
+      queue_status TEXT NOT NULL DEFAULT 'queued' CHECK (queue_status IN ('queued','assigned','declined')),
+      admin_notes TEXT DEFAULT NULL,
+      reviewed_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+      reviewed_at TEXT DEFAULT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+
+  const userSchemaRow = sqlite
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'")
+    .get();
+  if (userSchemaRow && !userSchemaRow.sql.includes("'faculty'")) {
+    sqlite.exec(`
+      PRAGMA foreign_keys = OFF;
+      CREATE TABLE users_migrated (
+        user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        student_id TEXT UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('student','faculty','admin')),
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO users_migrated (user_id, name, email, student_id, password_hash, role, created_at)
+      SELECT user_id, name, email, student_id, password_hash, role, created_at FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_migrated RENAME TO users;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
 
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -131,7 +175,8 @@ function initSqliteDatabase(options = {}) {
     sqlite.exec(`
     INSERT INTO users (name, email, student_id, password_hash, role) VALUES
       ('Admin', 'admin@campus.test', NULL, '${adminHash}', 'admin'),
-      ('Student', 'student@campus.test', 'CSE2026001', '${adminHash}', 'student');
+      ('Student', 'student@campus.test', 'CSE2026001', '${adminHash}', 'student'),
+      ('Dr. Meera Sharma', 'faculty@campus.test', 'FAC2026001', '${adminHash}', 'faculty');
 
     INSERT INTO venues (venue_name, capacity, resources) VALUES
       ('Main Auditorium', 300, 'Projector, PA system, stage'),
@@ -146,7 +191,11 @@ function initSqliteDatabase(options = {}) {
     INSERT INTO events (title, description, event_date, start_time, end_time, expected_attendance, venue_id, created_by, status) VALUES
       ('Research & Innovation Symposium', 'Student research presentations, poster sessions, and faculty discussions.', '${formatDate(5)}', '10:00', '12:00', 200, 1, 1, 'scheduled'),
       ('Career Readiness Workshop', 'Practical resume reviews, interview exercises, and career planning.', '${formatDate(6)}', '14:00', '16:00', 60, 3, 1, 'scheduled'),
-      ('Build Lab: Campus Hackathon', 'Hands-on prototyping for student software projects.', '${formatDate(7)}', '09:00', '13:00', 35, 2, 1, 'scheduled');
+      ('Build Lab: Campus Hackathon', 'Hands-on prototyping for student software projects.', '${formatDate(7)}', '09:00', '13:00', 35, 2, 1, 'scheduled'),
+      ('Departmental Robotics Showcase', 'Faculty-mentored robotics demonstrations and student project evaluations.', '${formatDate(10)}', '11:00', '13:00', 75, 3, 3, 'pending_schedule');
+
+    INSERT INTO venue_requests (event_id, faculty_id, preferred_venue_id, event_size, required_resources, event_category, priority_level, accessibility_needed, av_support_needed, setup_minutes, faculty_notes, queue_status) VALUES
+      (4, 3, 3, 75, 'Projector, Microphone, Seating', 'workshop', 'high', 1, 1, 15, 'Requires front demonstration tables and wireless mic for Q&A.', 'queued');
 
     INSERT INTO registrations (user_id, event_id) VALUES
       (2, 1);
@@ -174,6 +223,70 @@ function initSqliteDatabase(options = {}) {
       ('99999999-9999-4999-9999-999999999999', 4, 'SJF', 'P4', 'Prepare certificates', 5, 4, 12, 16, 7, 11),
       ('99999999-9999-4999-9999-999999999999', 5, 'SJF', 'P5', 'Update event statistics', 20, 2, 20, 22, 0, 2);
   `);
+  } else if (options.seedDemoData !== false) {
+    const existingFaculty = sqlite
+      .prepare("SELECT user_id FROM users WHERE role='faculty' LIMIT 1")
+      .get();
+    const demoAdmin = sqlite
+      .prepare("SELECT user_id FROM users WHERE email='admin@campus.test' LIMIT 1")
+      .get();
+    if (!existingFaculty && demoAdmin) {
+      sqlite.exec(`
+        INSERT INTO users (name, email, student_id, password_hash, role)
+        VALUES ('Dr. Meera Sharma', 'faculty@campus.test', 'FAC2026001', '${adminHash}', 'faculty');
+      `);
+      const newFaculty = sqlite
+        .prepare("SELECT user_id FROM users WHERE email='faculty@campus.test' LIMIT 1")
+        .get();
+      const existingReqCount = sqlite
+        .prepare("SELECT COUNT(*) AS n FROM venue_requests")
+        .get().n;
+      const sampleVenue =
+        sqlite.prepare("SELECT venue_id FROM venues ORDER BY venue_id ASC LIMIT 1 OFFSET 2").get() ||
+        sqlite.prepare("SELECT venue_id FROM venues ORDER BY venue_id ASC LIMIT 1").get();
+      if (newFaculty && existingReqCount === 0 && sampleVenue) {
+        const roboticsEvent = sqlite
+          .prepare("SELECT event_id FROM events WHERE title='Departmental Robotics Showcase' LIMIT 1")
+          .get();
+        let eventId = roboticsEvent?.event_id;
+        if (!eventId) {
+          const evInfo = sqlite
+            .prepare(
+              "INSERT INTO events (title, description, event_date, start_time, end_time, expected_attendance, venue_id, created_by, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .run(
+              "Departmental Robotics Showcase",
+              "Faculty-mentored robotics demonstrations and student project evaluations.",
+              formatDate(10),
+              "11:00",
+              "13:00",
+              75,
+              sampleVenue.venue_id,
+              newFaculty.user_id,
+              "pending_schedule",
+            );
+          eventId = Number(evInfo.lastInsertRowid);
+        }
+        sqlite
+          .prepare(
+            "INSERT INTO venue_requests (event_id, faculty_id, preferred_venue_id, event_size, required_resources, event_category, priority_level, accessibility_needed, av_support_needed, setup_minutes, faculty_notes, queue_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          )
+          .run(
+            eventId,
+            newFaculty.user_id,
+            sampleVenue.venue_id,
+            75,
+            "Projector, Microphone, Seating",
+            "workshop",
+            "high",
+            1,
+            1,
+            15,
+            "Requires front demonstration tables and wireless mic for Q&A.",
+            "queued",
+          );
+      }
+    }
   }
 
   async function query(sql, params = []) {

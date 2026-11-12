@@ -1,0 +1,268 @@
+<%- include('partials/header',{title:'Faculty hub',active:'faculty'}) %>
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">FACULTY COORDINATOR WORKSPACE</p>
+    <h1>Events &amp; venue queue<span class="heading-period">.</span></h1>
+    <p class="muted">Inspect student registrations for any campus event, register new events, and monitor your hall queue status.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary" href="/events">All campus events</a>
+    <a class="btn btn-primary" href="/faculty/events/new">+ Register new event</a>
+  </div>
+</div>
+
+<div class="metric-grid mb-4">
+  <div class="panel metric">
+    <div class="metric-top"><span>Events organized</span><span class="metric-icon"><%- include('partials/icon',{name:'calendar'}) %></span></div>
+    <strong><%= stats.myEventsCount %></strong>
+    <small>Active &amp; queued events</small>
+  </div>
+  <div class="panel metric">
+    <div class="metric-top"><span>In venue queue</span><span class="metric-icon"><%- include('partials/icon',{name:'clock'}) %></span></div>
+    <strong><%= stats.queuedCount %></strong>
+    <small>Awaiting campus hall confirmation</small>
+  </div>
+  <div class="panel metric">
+    <div class="metric-top"><span>Assigned halls</span><span class="metric-icon"><%- include('partials/icon',{name:'building'}) %></span></div>
+    <strong><%= stats.assignedCount %></strong>
+    <small>Confirmed &amp; open for registration</small>
+  </div>
+  <div class="panel metric">
+    <div class="metric-top"><span>Confirmed attendees</span><span class="metric-icon"><%- include('partials/icon',{name:'users'}) %></span></div>
+    <strong><%= stats.totalAttendees %></strong>
+    <small>Students enrolled across your events</small>
+  </div>
+</div>
+
+<section class="panel mb-4">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">STUDENT REGISTRATIONS DIRECTORY</p>
+      <h2>Access event registrations<span class="heading-period">.</span></h2>
+      <p class="muted mb-0">Select any campus event to view confirmed attendees, waitlist queues, check-in status, or export CSV rosters.</p>
+    </div>
+    <% if (allEvents.length) { %>
+      <div class="d-flex gap-2 flex-wrap align-items-center" hidden data-enhance>
+        <label class="visually-hidden" for="faculty-event-jump">Choose event to inspect registrations</label>
+        <select class="form-select form-select-sm" id="faculty-event-jump" style="min-width:240px;">
+          <% for (const ev of allEvents) { %>
+            <option value="<%= ev.event_id %>"><%= ev.title %> (<%= displayDate(ev.event_date) %> · <%= Number(ev.registration_count || 0) %>/<%= ev.expected_attendance %>)</option>
+          <% } %>
+        </select>
+        <a class="btn btn-primary btn-sm" id="faculty-open-roster-btn" href="/events/<%= allEvents[0].event_id %>/attendees">Open registrations</a>
+      </div>
+    <% } %>
+  </div>
+
+  <% if (allEvents.length) { %>
+    <p class="table-scroll-hint">Scroll horizontally to view all columns.</p>
+    <div class="table-responsive" tabindex="0" role="region" aria-label="Event registrations table">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Event</th>
+            <th scope="col">Date &amp; time</th>
+            <th scope="col">Hall</th>
+            <th scope="col">Status</th>
+            <th scope="col">Registrations</th>
+            <th scope="col">Roster actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const ev of allEvents) {
+               const regCount = Number(ev.registration_count || 0);
+               const waitCount = Number(ev.waitlist_count || 0);
+          %>
+            <tr>
+              <td>
+                <strong><%= ev.title %></strong>
+                <% if (Number(ev.created_by) === Number(user.user_id)) { %>
+                  <span class="badge bg-primary-subtle text-primary ms-1">Yours</span>
+                <% } %>
+                <small class="d-block muted">Organizer: <%= ev.organizer %></small>
+              </td>
+              <td><%= displayDate(ev.event_date) %><br><small class="muted"><%= clock(ev.start_time) %>–<%= clock(ev.end_time) %></small></td>
+              <td><%= ev.venue_name %></td>
+              <td>
+                <span class="status <%= ev.status === 'scheduled' ? 'status-green' : 'status-amber' %>">
+                  <%= ev.status === 'scheduled' ? 'Scheduled' : 'In Venue Queue' %>
+                </span>
+              </td>
+              <td>
+                <strong><%= regCount %></strong> / <%= ev.expected_attendance %>
+                <% if (waitCount > 0) { %>
+                  <small class="d-block muted"><%= waitCount %> waitlisted</small>
+                <% } %>
+              </td>
+              <td>
+                <div class="d-flex gap-2 flex-wrap">
+                  <a class="btn btn-sm btn-outline-primary" href="/events/<%= ev.event_id %>/attendees">View registrations</a>
+                  <a class="btn btn-sm btn-outline-secondary" href="/events/<%= ev.event_id %>/attendees.csv">CSV</a>
+                </div>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <p class="empty-state mb-0">No active campus events found yet.</p>
+  <% } %>
+</section>
+
+<section class="panel mb-4">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">VENUE REQUESTS &amp; PRIORITY QUEUE</p>
+      <h2>My venue queue status<span class="heading-period">.</span></h2>
+    </div>
+    <a class="btn btn-primary btn-sm" href="/faculty/events/new">+ New event &amp; queue request</a>
+  </div>
+
+  <% if (myRequests.length) { %>
+    <div class="queue-list">
+      <% for (const r of myRequests) { const rank = queueRanks.get(r.request_id); %>
+        <article class="queue-item-card">
+          <div class="queue-item-top">
+            <div>
+              <div class="d-flex gap-2 align-items-center flex-wrap mb-1">
+                <span class="queue-ticket">#REQ-<%= r.request_id %></span>
+                <% if (r.queue_status === 'queued' && rank) { %>
+                  <span class="status status-amber">Queue #<%= rank.position %> of <%= rank.total %></span>
+                <% } else if (r.queue_status === 'assigned') { %>
+                  <span class="status status-green">Venue Assigned</span>
+                <% } else { %>
+                  <span class="status status-gray">Returned for Revision</span>
+                <% } %>
+                <span class="priority-pill priority-<%= r.priority_level %>"><%= r.priority_level.toUpperCase() %></span>
+              </div>
+              <h3 class="mb-1"><%= r.title %></h3>
+              <p class="muted mb-0"><%= displayDate(r.event_date) %> · <%= clock(r.start_time) %>–<%= clock(r.end_time) %> · <%= r.event_size %> expected attendees</p>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap align-items-start">
+              <% if (r.queue_status === 'queued') { %>
+                <form method="post" action="/faculty/queue/<%= r.request_id %>/withdraw" data-confirm="Remove this event from the venue queue?">
+                  <input type="hidden" name="csrf_token" value="<%= csrf %>">
+                  <button class="btn btn-sm btn-outline-danger">Withdraw from queue</button>
+                </form>
+              <% } else if (r.queue_status === 'assigned') { %>
+                <a class="btn btn-sm btn-outline-primary" href="/events/<%= r.event_id %>/attendees">View registrations</a>
+              <% } %>
+            </div>
+          </div>
+
+          <dl class="queue-param-strip">
+            <div><dt>Category</dt><dd><%= r.event_category %></dd></div>
+            <div><dt>Required Equipment</dt><dd><%= r.required_resources %></dd></div>
+            <div><dt>Preferred Hall</dt><dd><%= r.preferred_venue_name || 'No preference (auto-match)' %></dd></div>
+            <div><dt>Setup Buffer</dt><dd><%= r.setup_minutes %> min</dd></div>
+            <div><dt>Support Flags</dt><dd><%= [r.av_support_needed ? 'AV Tech Support' : null, r.accessibility_needed ? 'Step-Free Access' : null].filter(Boolean).join(', ') || 'Standard' %></dd></div>
+            <% if (r.assigned_venue_name) { %>
+              <div><dt>Assigned Venue</dt><dd><strong class="text-success"><%= r.assigned_venue_name %></strong></dd></div>
+            <% } %>
+          </dl>
+
+          <% if (r.admin_notes) { %>
+            <div class="notice mt-2 mb-0">
+              <strong>Campus Admin Note:</strong> <%= r.admin_notes %>
+            </div>
+          <% } %>
+
+          <% if (r.queue_status === 'declined') { %>
+            <details class="mt-3">
+              <summary class="btn btn-sm btn-outline-primary">Adjust parameters &amp; re-enter queue</summary>
+              <form method="post" action="/faculty/queue" class="mt-3 p-3 border rounded">
+                <input type="hidden" name="csrf_token" value="<%= csrf %>">
+                <input type="hidden" name="event_id" value="<%= r.event_id %>">
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <label class="form-label" for="requeue-pref-<%= r.request_id %>">Preferred venue</label>
+                    <select class="form-select form-select-sm" id="requeue-pref-<%= r.request_id %>" name="preferred_venue_id">
+                      <option value="any">No preference (auto-match best hall)</option>
+                      <% for (const v of venues) { %>
+                        <option value="<%= v.venue_id %>" <%= String(r.preferred_venue_id) === String(v.venue_id) ? 'selected' : '' %>><%= v.venue_name %> (<%= v.capacity %> seats)</option>
+                      <% } %>
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label" for="requeue-prio-<%= r.request_id %>">Priority</label>
+                    <select class="form-select form-select-sm" id="requeue-prio-<%= r.request_id %>" name="priority_level">
+                      <% for (const p of priorityLevels) { %>
+                        <option value="<%= p.value %>" <%= r.priority_level === p.value ? 'selected' : '' %>><%= p.label %></option>
+                      <% } %>
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label" for="requeue-setup-<%= r.request_id %>">Setup buffer (min)</label>
+                    <input class="form-control form-control-sm" id="requeue-setup-<%= r.request_id %>" name="setup_minutes" type="number" min="0" max="180" value="<%= r.setup_minutes %>">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label" for="requeue-res-<%= r.request_id %>">Required equipment</label>
+                    <input class="form-control form-control-sm" id="requeue-res-<%= r.request_id %>" name="custom_resources" value="<%= r.required_resources %>">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label" for="requeue-notes-<%= r.request_id %>">Updated notes</label>
+                    <input class="form-control form-control-sm" id="requeue-notes-<%= r.request_id %>" name="faculty_notes" value="<%= r.faculty_notes || '' %>">
+                  </div>
+                  <div class="col-12">
+                    <button class="btn btn-sm btn-primary">Submit updated venue request</button>
+                  </div>
+                </div>
+              </form>
+            </details>
+          <% } %>
+        </article>
+      <% } %>
+    </div>
+  <% } else { %>
+    <p class="empty-state mb-0">You have not queued any events yet. Use <strong>+ New event &amp; queue request</strong> above to register your event and enter the venue queue.</p>
+  <% } %>
+</section>
+
+<% if (unqueuedPendingEvents.length) { %>
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">DRAFT / UNQUEUED EVENTS</p>
+        <h2>Queue an existing event for a venue<span class="heading-period">.</span></h2>
+      </div>
+    </div>
+    <form method="post" action="/faculty/queue" class="row g-3">
+      <input type="hidden" name="csrf_token" value="<%= csrf %>">
+      <div class="col-md-4">
+        <label class="form-label" for="existing_event_id">Your pending event</label>
+        <select class="form-select" id="existing_event_id" name="event_id" required>
+          <% for (const ev of unqueuedPendingEvents) { %>
+            <option value="<%= ev.event_id %>"><%= ev.title %> (<%= displayDate(ev.event_date) %> · <%= ev.expected_attendance %> seats)</option>
+          <% } %>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="existing_pref_venue">Preferred venue</label>
+        <select class="form-select" id="existing_pref_venue" name="preferred_venue_id">
+          <option value="any">No preference (auto-match best hall)</option>
+          <% for (const v of venues) { %>
+            <option value="<%= v.venue_id %>"><%= v.venue_name %> (<%= v.capacity %> seats)</option>
+          <% } %>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="existing_prio">Priority</label>
+        <select class="form-select" id="existing_prio" name="priority_level">
+          <% for (const p of priorityLevels) { %>
+            <option value="<%= p.value %>"><%= p.label %></option>
+          <% } %>
+        </select>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label" for="existing_resources">Required equipment &amp; hall setup</label>
+        <input class="form-control" id="existing_resources" name="custom_resources" placeholder="e.g. Projector, Microphone, Computers, AC" value="Projector, Microphone">
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <button class="btn btn-primary w-100">Join venue queue</button>
+      </div>
+    </form>
+  </section>
+<% } %>
+<%- include('partials/footer') %>

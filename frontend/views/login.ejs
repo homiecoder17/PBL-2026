@@ -52,10 +52,10 @@
     <form method="post">
       <input type="hidden" name="csrf_token" value="<%= csrf %>">
       <div class="mb-4">
-        <label class="form-label" for="identifier">Email or student ID</label>
+        <label class="form-label" for="identifier">Email or university ID</label>
         <div class="input-icon-wrap">
           <span class="input-leading-icon"><%- include('partials/icon',{name:'user'}) %></span>
-          <input class="form-control" id="identifier" name="identifier" required maxlength="254" autocomplete="username" spellcheck="false" value="<%= identifier || '' %>" placeholder="you@university.edu or CSE2026001">
+          <input class="form-control" id="identifier" name="identifier" required maxlength="254" autocomplete="username" spellcheck="false" value="<%= identifier || '' %>" placeholder="you@university.edu, CSE2026001, or FAC2026001">
         </div>
       </div>
       <div class="mb-4">
