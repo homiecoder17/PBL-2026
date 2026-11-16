@@ -625,10 +625,13 @@ test("Reports allow only known queries and enforce administrator access", async 
   const a = request.agent(server);
   await login(a);
   for (const q of [
+    "events_and_venues",
+    "system_accounts",
+    "venue_event_counts",
+    "venue_requests_queue",
+    "organizer_events",
     "event_counts",
-    "student_roster",
-    "available_events",
-    "run_comparison",
+    "venue_utilization",
   ])
     assert.equal((await a.get("/reports?query=" + q)).status, 200);
   for (const q of ["DROP TABLE users", "__proto__"])

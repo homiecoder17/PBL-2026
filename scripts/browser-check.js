@@ -196,9 +196,9 @@ try {
   await capture("15-run-history", "/runs");
   for (const [name, url] of [
     ["16-dbms-reports", "/reports"],
-    ["17-student-roster", "/reports?query=student_roster"],
-    ["18-event-report", "/reports?query=available_events"],
-    ["19-run-comparison", "/reports?query=run_comparison"],
+    ["17-venue-events", "/reports?query=venue_event_counts"],
+    ["18-event-organizers", "/reports?query=organizer_events"],
+    ["19-venue-utilization", "/reports?query=venue_utilization"],
   ])
     await capture(name, url);
   await page.getByRole("button", { name: "Log out", exact: true }).click();
