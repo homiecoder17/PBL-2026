@@ -2559,6 +2559,33 @@ a, button { touch-action: manipulation; }
   margin-bottom: 6px;
   color: var(--muted);
 }
+.alg-panel-hidden {
+  display: none !important;
+}
+.alg-card[data-alg-card] {
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.alg-card[data-alg-card]:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+.alg-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.alg-tab-bar {
+  background: var(--surface-low);
+  border: 1px solid var(--border);
+}
+.advanced-sql-toggle summary {
+  color: var(--muted);
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+.advanced-sql-toggle summary:hover {
+  color: var(--accent);
+}
 
 @media (max-width: 1199px) {
   .alg-matrix-grid {

@@ -8,7 +8,7 @@
   };
   const canCommit = user && user.role === 'admin' && typeof source !== 'undefined' && (typeof nonPreemptiveAlgs === 'undefined' || nonPreemptiveAlgs.includes(result.algorithm));
 %>
-<section class="panel schedule-result">
+<section class="panel schedule-result alg-result-panel" data-alg-panel="<%= result.algorithm %>">
   <div class="section-heading">
     <div>
       <p class="eyebrow"><%= labels[result.algorithm] || result.algorithm %></p>

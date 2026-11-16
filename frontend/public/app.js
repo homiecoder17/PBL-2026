@@ -220,6 +220,65 @@ if (simDate && simVenue) {
   simVenue.addEventListener("change", navigateFilter);
 }
 
+// Simulator algorithm tab switcher (CSP-safe, declutters 5-algorithm detail panels)
+const algTabBtns = document.querySelectorAll(".alg-tab-btn");
+const algPanels = document.querySelectorAll(".alg-result-panel");
+const algCards = document.querySelectorAll(".alg-card[data-alg-card]");
+
+if (algTabBtns.length > 0 && algPanels.length > 0) {
+  const switchAlgorithm = (target) => {
+    algTabBtns.forEach((btn) => {
+      const match = btn.getAttribute("data-alg-target") === target;
+      btn.classList.toggle("btn-primary", match);
+      btn.classList.toggle("btn-outline-secondary", !match);
+    });
+
+    algCards.forEach((card) => {
+      const match = card.getAttribute("data-alg-card") === target;
+      card.classList.toggle("is-selected", match);
+    });
+
+    algPanels.forEach((panel) => {
+      const panelAlg = panel.getAttribute("data-alg-panel");
+      if (target === "all" || panelAlg === target) {
+        panel.classList.remove("alg-panel-hidden");
+      } else {
+        panel.classList.add("alg-panel-hidden");
+      }
+    });
+  };
+
+  algTabBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.getAttribute("data-alg-target");
+      if (target) switchAlgorithm(target);
+    });
+  });
+
+  algCards.forEach((card) => {
+    const target = card.getAttribute("data-alg-card");
+    card.addEventListener("click", () => {
+      if (target) switchAlgorithm(target);
+      const activePanel = document.querySelector(`.alg-result-panel[data-alg-panel="${target}"]`);
+      if (activePanel) {
+        activePanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        card.click();
+      }
+    });
+  });
+
+  const activeBtn = document.querySelector(".alg-tab-btn.active") || algTabBtns[0];
+  if (activeBtn) {
+    const initialTarget = activeBtn.getAttribute("data-alg-target");
+    if (initialTarget) switchAlgorithm(initialTarget);
+  }
+}
+
 // Dashboard interactive monthly calendar (CSP-safe DOM construction, no innerHTML).
 const calendarDataNode = document.getElementById("calendar-data");
 const daysContainer = document.getElementById("calendar-days");

@@ -1,42 +1,47 @@
 <%- include('partials/header',{title:'OS Scheduler',active:'simulator'}) %>
 <div class="page-heading">
   <div>
-    <p class="eyebrow">ADMINISTRATION · OPERATING SYSTEMS LAB</p>
-    <h1>Multi-Algorithm Dispatch Simulator<span class="heading-period">.</span></h1>
-    <p class="muted">Compare FCFS, SJF, SRTF (Preemptive), Priority, and Round Robin (RR), evaluate turnaround &amp; response times, and commit non-preemptive venue schedules.</p>
+    <p class="eyebrow">ADMINISTRATION · SCHEDULING DISPATCH</p>
+    <h1>OS Schedule Simulator<span class="heading-period">.</span></h1>
+    <p class="muted">Compare dispatch strategies (FCFS, SJF, SRTF, Priority, Round Robin), analyze timeline metrics, and commit optimal time slots.</p>
   </div>
-  <span class="status status-green"><span class="status-dot" aria-hidden="true"></span> Deterministic Engine</span>
+  <div class="d-flex align-items-center gap-2">
+    <span class="status status-green"><span class="status-dot" aria-hidden="true"></span> Deterministic Engine</span>
+  </div>
 </div>
 
 <% if(dayEvents && dayEvents.length){ %>
-  <div class="alert alert-info d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <span>
-      📅 Found <strong><%= dayEvents.length %></strong> event(s) in database for <strong><%= selectedDate %></strong>
-      <% if(selectedVenueId && selectedVenueId !== 'all'){ %>
-        at <strong><%= venues.find(v => String(v.venue_id) === String(selectedVenueId))?.venue_name %></strong>
-      <% } else { %>
-        across all venues
-      <% } %>. Loaded into OS processes automatically.
-    </span>
-    <a class="btn btn-sm btn-primary" href="/events/new?date=<%= selectedDate %>">+ Add more events for this date</a>
+  <div class="panel d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2 py-3 px-3 border-start border-4 border-primary">
+    <div class="d-flex align-items-center gap-2">
+      <span class="fs-5">📅</span>
+      <span>
+        Found <strong><%= dayEvents.length %></strong> event(s) for <strong><%= selectedDate %></strong>
+        <% if(selectedVenueId && selectedVenueId !== 'all'){ %>
+          at <strong><%= venues.find(v => String(v.venue_id) === String(selectedVenueId))?.venue_name %></strong>
+        <% } else { %>
+          across all venues
+        <% } %> · auto-mapped into process workloads.
+      </span>
+    </div>
+    <a class="btn btn-sm btn-outline-primary" href="/events/new?date=<%= selectedDate %>">+ Add event</a>
   </div>
 <% } %>
 
-<div class="simulator-input-grid">
-  <form class="panel" method="post" id="simulator-form">
+<div class="panel mb-4">
+  <form method="post" id="simulator-form">
     <input type="hidden" name="csrf_token" value="<%= csrf %>">
 
-    <div class="d-flex justify-content-between align-items-baseline mb-2">
-      <h2>Day Schedule &amp; OS Workload</h2>
-      <span class="status status-gray font-mono"><%= selectedDate %></span>
-    </div>
-    <p class="small-note mb-3">Select a date/venue to load events from the database, tune Round Robin quantum or task priorities, and run all 5 OS algorithms.</p>
-
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-      <span class="small-note fw-semibold">Quick Date:</span>
-      <a href="/simulator?date=<%= today %>&venue_id=<%= selectedVenueId %>&quantum=<%= quantum %>" class="btn btn-sm <%= selectedDate===today ? 'btn-primary' : 'btn-outline-secondary' %>">Today (<%= today %>)</a>
-      <a href="/simulator?date=<%= tomorrow %>&venue_id=<%= selectedVenueId %>&quantum=<%= quantum %>" class="btn btn-sm <%= selectedDate===tomorrow ? 'btn-primary' : 'btn-outline-secondary' %>">Tomorrow (<%= tomorrow %>)</a>
-      <a href="/simulator?date=<%= dayAfterTomorrow %>&venue_id=<%= selectedVenueId %>&quantum=<%= quantum %>" class="btn btn-sm <%= selectedDate===dayAfterTomorrow ? 'btn-primary' : 'btn-outline-secondary' %>">Day After Tomorrow (<%= dayAfterTomorrow %>)</a>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+      <div>
+        <h2 class="h5 mb-0">Schedule Parameters &amp; Workload</h2>
+        <p class="small-note text-muted mb-0">Select a date and hall to benchmark scheduling algorithms.</p>
+      </div>
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <span class="small-note text-muted">Quick dates:</span>
+        <a href="/simulator?date=<%= today %>&venue_id=<%= selectedVenueId %>&quantum=<%= quantum %>" class="btn btn-sm <%= selectedDate===today ? 'btn-primary' : 'btn-outline-secondary' %>">Today</a>
+        <a href="/simulator?date=<%= tomorrow %>&venue_id=<%= selectedVenueId %>&quantum=<%= quantum %>" class="btn btn-sm <%= selectedDate===tomorrow ? 'btn-primary' : 'btn-outline-secondary' %>">Tomorrow</a>
+        <a href="/simulator?date=<%= dayAfterTomorrow %>&venue_id=<%= selectedVenueId %>&quantum=<%= quantum %>" class="btn btn-sm <%= selectedDate===dayAfterTomorrow ? 'btn-primary' : 'btn-outline-secondary' %>">Day After</a>
+      </div>
     </div>
 
     <div class="row g-3 mb-3">
@@ -54,7 +59,7 @@
         </select>
       </div>
       <div class="col-md-3">
-        <label class="form-label" for="quantum">RR Quantum (q)</label>
+        <label class="form-label" for="quantum">Round Robin Quantum (q)</label>
         <input class="form-control" type="number" id="quantum" name="quantum" min="1" max="1000" required value="<%= quantum %>">
       </div>
     </div>
@@ -62,18 +67,18 @@
     <% if(dayEvents && dayEvents.length > 0){ %>
       <div class="mb-3">
         <div class="d-flex justify-content-between align-items-center mb-2">
-          <label class="form-label mb-0">Events for this date (<%= dayEvents.length %>)</label>
-          <span class="small-note text-muted">Auto-mapped to OS processes</span>
+          <label class="form-label mb-0 fw-semibold">Mapped Campus Events (<%= dayEvents.length %>)</label>
+          <span class="small-note text-muted">Arrival (AT) = Start &minus; 9 AM · Burst (BT) = ceil(Seats / 50)</span>
         </div>
-        <div class="table-responsive border rounded" style="max-height: 240px; overflow-y: auto;">
+        <div class="table-responsive border rounded" style="max-height: 200px; overflow-y: auto;">
           <table class="table table-sm align-middle mb-0">
-            <thead>
+            <thead class="table-light">
               <tr>
-                <th scope="col" style="width: 50px;">PID</th>
+                <th scope="col" style="width: 60px;">PID</th>
                 <th scope="col">Event Title</th>
                 <th scope="col">Venue</th>
                 <th scope="col">Start &rarr; AT</th>
-                <th scope="col">Students &rarr; BT</th>
+                <th scope="col">Seats &rarr; BT</th>
                 <th scope="col">Status</th>
               </tr>
             </thead>
@@ -83,7 +88,7 @@
                    const bt = Math.max(1, Math.ceil(ev.expected_attendance / 50));
               %>
               <tr>
-                <td><span class="badge bg-secondary">E<%= idx + 1 %></span></td>
+                <td><span class="badge bg-secondary font-mono">E<%= idx + 1 %></span></td>
                 <td><strong><%= ev.title %></strong></td>
                 <td><span class="small-note"><%= ev.venue_name || 'Auditorium' %></span></td>
                 <td class="font-mono"><%= ev.start_time.slice(0, 5) %> <small class="text-muted">(AT=<%= at %>h)</small></td>
@@ -100,90 +105,87 @@
             </tbody>
           </table>
         </div>
-        <p class="small-note mt-2 mb-0">✨ <em>Mapping rule:</em> <code>AT = Start Time &minus; 09:00 AM</code>, <code>BT = ceil(Students / 50)</code>.</p>
       </div>
     <% } else { %>
-      <div class="p-3 mb-3 border rounded text-center">
-        <p class="mb-2 text-muted">No events found in database for <%= selectedDate %>.</p>
+      <div class="p-3 mb-3 border rounded text-center bg-light-subtle">
+        <p class="mb-2 text-muted small">No scheduled events found for <%= selectedDate %>.</p>
         <div class="d-flex justify-content-center gap-2 flex-wrap">
-          <a class="btn btn-sm btn-primary" href="/events/new?date=<%= selectedDate %>">+ Create event for <%= selectedDate %></a>
-          <button type="submit" name="load_samples" value="true" class="btn btn-sm btn-outline-secondary">Load Sample Workload</button>
+          <a class="btn btn-sm btn-primary" href="/events/new?date=<%= selectedDate %>">+ Create event for date</a>
+          <button type="submit" name="load_samples" value="true" class="btn btn-sm btn-outline-secondary">Load sample workload</button>
         </div>
       </div>
     <% } %>
 
-    <div class="card-actions">
-      <button class="btn btn-primary" type="submit">Run OS scheduling comparison</button>
-      <a class="btn btn-outline-secondary" href="/events/new?date=<%= selectedDate %>">+ Add event for this date</a>
-      <a class="btn btn-outline-secondary" href="/simulator?date=<%= selectedDate %>&reset=1&quantum=<%= quantum %>">Reset samples</a>
+    <div class="d-flex gap-2 flex-wrap align-items-center pt-2">
+      <button class="btn btn-primary" type="submit">Run schedule comparison</button>
+      <a class="btn btn-outline-secondary" href="/events/new?date=<%= selectedDate %>">+ Add event</a>
+      <a class="btn btn-outline-secondary" href="/simulator?date=<%= selectedDate %>&reset=1&quantum=<%= quantum %>">Reset</a>
     </div>
 
     <details class="mt-3 pt-2 border-top">
-      <summary class="small-note" style="cursor: pointer; user-select: none;">🛠 Advanced: View / edit raw process CSV (4 or 5 columns with priority)</summary>
+      <summary class="small-note text-muted" style="cursor: pointer; user-select: none;">🛠 Advanced: View / edit raw process CSV workload</summary>
       <div class="mt-2">
-        <textarea class="form-control workload-input" id="processes" name="processes" rows="4" style="min-height: 110px;"><%= source %></textarea>
-        <p class="small-note mt-1 mb-0">Format: <code>process_id, title, arrival_or_HH:MM, burst_or_students[, priority]</code> (lower number = higher priority).</p>
+        <textarea class="form-control workload-input font-mono" id="processes" name="processes" rows="3" style="min-height: 90px;"><%= source %></textarea>
+        <p class="small-note mt-1 mb-0 text-muted">Format: <code>process_id, title, arrival_or_HH:MM, burst_or_students[, priority]</code></p>
       </div>
     </details>
   </form>
-
-  <aside class="panel rules-panel">
-    <p class="eyebrow">EVENT-TO-CPU MODEL</p>
-    <h2>5 CPU Scheduling Models</h2>
-    <ul>
-      <li><strong>FCFS:</strong> Non-preemptive arrival order (baseline, reveals Convoy Effect).</li>
-      <li><strong>SJF:</strong> Non-preemptive shortest burst among arrived jobs.</li>
-      <li><strong>SRTF:</strong> Preemptive shortest remaining time first (optimal AWT).</li>
-      <li><strong>Priority:</strong> Non-preemptive; lower priority number executes first (default <code>0</code>).</li>
-      <li><strong>Round Robin (RR):</strong> Preemptive cyclic fairness using quantum <code>q = <%= quantum %></code>.</li>
-    </ul>
-    <div class="notice">
-      All 5 runs can be saved as immutable UUID snapshots. Non-preemptive schedules (FCFS, SJF, Priority) can be committed directly to venue slots.
-    </div>
-  </aside>
 </div>
 
 <% if(results.length){ %>
   <section class="panel mb-4">
-    <div class="section-heading">
+    <div class="section-heading mb-3">
       <div>
         <p class="eyebrow">5-ALGORITHM BENCHMARK MATRIX</p>
-        <h2>Side-by-side comparative metrics<span class="heading-period">.</span></h2>
+        <h2 class="mb-0">Comparative Performance<span class="heading-period">.</span></h2>
       </div>
       <% if (bestAlgorithm) { %>
-        <span class="status status-green"><span class="status-dot" aria-hidden="true"></span> Lowest wait: <%= bestAlgorithm %></span>
+        <span class="status status-green"><span class="status-dot" aria-hidden="true"></span> Lowest waiting time: <%= bestAlgorithm %></span>
       <% } %>
     </div>
 
-    <div class="alg-matrix-grid">
+    <div class="alg-matrix-grid mb-4">
       <% for (const r of results) {
            const isBest = r.algorithm === bestAlgorithm;
            const isPreemptive = r.algorithm === 'SRTF' || r.algorithm === 'RR';
       %>
-        <article class="alg-card <%= isBest ? 'alg-card-best' : '' %>">
+        <article class="alg-card <%= isBest ? 'alg-card-best is-selected' : '' %>" data-alg-card="<%= r.algorithm %>" role="button" tabindex="0" title="Click to view <%= r.algorithm %> details">
           <% if (isBest) { %><span class="alg-ribbon">Optimal WT</span><% } %>
           <div class="alg-card-head">
             <strong><%= r.algorithm %><%= r.algorithm === 'RR' ? ` (q=${r.quantum})` : '' %></strong>
             <span class="status <%= isPreemptive ? 'status-amber' : 'status-gray' %>"><%= isPreemptive ? 'Preemptive' : 'Non-preemptive' %></span>
           </div>
           <dl class="alg-stats">
-            <div><dt>Avg WT</dt><dd><strong><%= fixed(r.average_waiting_time) %></strong> u</dd></div>
-            <div><dt>Avg TAT</dt><dd><%= fixed(r.average_turnaround_time) %> u</dd></div>
-            <div><dt>Avg RT</dt><dd><%= fixed(r.average_response_time) %> u</dd></div>
+            <div><dt>Avg Wait</dt><dd><strong><%= fixed(r.average_waiting_time) %></strong> u</dd></div>
+            <div><dt>Avg Turnaround</dt><dd><%= fixed(r.average_turnaround_time) %> u</dd></div>
             <div><dt>Throughput</dt><dd><%= fixed(r.throughput) %>/u</dd></div>
           </dl>
           <div class="alg-util">
-            <div class="alg-util-head"><span>CPU Utilization</span><strong><%= fixed(r.cpu_utilization) %>%</strong></div>
+            <div class="alg-util-head"><span>CPU Efficiency</span><strong><%= fixed(r.cpu_utilization) %>%</strong></div>
             <div class="capacity-track"><span style="width:<%= Math.min(100, Math.round(r.cpu_utilization)) %>%"></span></div>
           </div>
         </article>
       <% } %>
     </div>
+
+    <div class="alg-tab-bar d-flex gap-2 flex-wrap align-items-center p-2 rounded border bg-light-subtle" role="tablist" aria-label="Algorithm tabs">
+      <span class="small-note fw-semibold text-muted px-1">Selected View:</span>
+      <% for (const r of results) {
+           const isBest = r.algorithm === bestAlgorithm;
+      %>
+        <button type="button" class="btn btn-sm <%= isBest ? 'btn-primary' : 'btn-outline-secondary' %> alg-tab-btn" data-alg-target="<%= r.algorithm %>">
+          <% if (isBest) { %>⭐ <% } %><%= r.algorithm %><%= r.algorithm === 'RR' ? ` (q=${r.quantum})` : '' %>
+        </button>
+      <% } %>
+      <button type="button" class="btn btn-sm btn-outline-secondary alg-tab-btn" data-alg-target="all">Show All 5</button>
+    </div>
   </section>
 
-  <% for(const result of results){ %>
-    <%- include('partials/result',{result, source, selectedVenueId, selectedDate, signedTokens, nonPreemptiveAlgs}) %>
-  <% } %>
+  <div class="alg-results-container">
+    <% for(const result of results){ %>
+      <%- include('partials/result',{result, source, selectedVenueId, selectedDate, signedTokens, nonPreemptiveAlgs}) %>
+    <% } %>
+  </div>
 <% } %>
 
 <%- include('partials/footer') %>
