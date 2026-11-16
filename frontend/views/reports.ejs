@@ -1,93 +1,106 @@
-<%- include('partials/header',{title:'Reports & analytics',active:'reports'}) %>
+<%- include('partials/header',{title:'DBMS portal',active:'reports'}) %>
 <div class="page-heading">
   <div>
-    <p class="eyebrow">ADMINISTRATION · SYSTEM REPORTS</p>
-    <h1>Campus reports &amp; analytics<span class="heading-period">.</span></h1>
-    <p class="muted">Real-time attendance summaries, venue capacity utilization, registration rosters, and scheduling audit logs.</p>
+    <p class="eyebrow">ADMINISTRATION · RELATIONAL DATABASE LAB</p>
+    <h1>DBMS Portal<span class="heading-period">.</span></h1>
+    <p class="muted">Interactive relational database query explorer demonstrating simple SQL queries, table joins, aggregations, and query plans.</p>
   </div>
+  <span class="status status-green"><span class="status-dot" aria-hidden="true"></span> Live Database</span>
 </div>
 
-<form method="get" class="panel report-selector">
-  <label for="query" class="form-label">Select report</label>
-  <div class="report-select-row">
-    <select name="query" id="query" class="form-select">
-      <% for (const [key, info] of Object.entries(reports)) { %>
-        <option value="<%= key %>" <%= key === selected ? 'selected' : '' %>><%= info.title %></option>
-      <% } %>
-    </select>
-    <button class="btn btn-primary">Generate report</button>
+<form method="get" class="panel report-selector mb-4">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-7">
+      <label for="query" class="form-label fw-semibold">Select simple SQL query</label>
+      <select name="query" id="query" class="form-select">
+        <% for (const [key, info] of Object.entries(reports)) { %>
+          <option value="<%= key %>" <%= key === selected ? 'selected' : '' %>><%= info.title %></option>
+        <% } %>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" id="explain" name="explain" value="1" <%= explain ? 'checked' : '' %>>
+        <label class="form-check-label small-note" for="explain">Show <code><%= dbFallback ? 'EXPLAIN' : 'EXPLAIN' %></code> execution plan</label>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-primary w-100">Run query</button>
+    </div>
   </div>
 </form>
 
-<section class="panel">
-  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <div>
-      <h2 class="mb-0"><%= report.title %></h2>
-      <p class="small-note text-muted mb-0"><%= rows.length %> record(s) found in database</p>
+<section class="panel mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <h2 class="h5 mb-0"><%= report.title %></h2>
+      <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-mono">SQL</span>
     </div>
-    <span class="status status-green"><span class="status-dot" aria-hidden="true"></span> Live data</span>
+    <span class="small-note text-muted font-mono"><%= rows.length %> record(s) returned</span>
   </div>
 
-  <p class="table-scroll-hint">Scroll horizontally to view all columns.</p>
-  <div class="table-responsive" tabindex="0" role="region" aria-label="Scrollable data table">
-    <table class="table">
-      <caption><%= rows.length %> record(s) returned from database.</caption>
-      <% if (rows.length) { %>
-        <thead>
-          <tr>
-            <% for (const column of columns) { %>
-              <th scope="col"><%= column.replaceAll('_', ' ') %></th>
-            <% } %>
-          </tr>
-        </thead>
-        <tbody>
-          <% for (const row of rows) { %>
+  <div class="mb-3">
+    <label class="form-label small-note text-muted mb-1">Executed SQL query:</label>
+    <pre class="sql-block p-3 rounded mb-0"><code><%= report.sql %></code></pre>
+  </div>
+
+  <% if (explain && explainRows.length) { %>
+    <div class="mb-4 pt-3 border-top">
+      <h3 class="h6 mb-2">Query execution plan (<code><%= dbFallback ? 'SQLite EXPLAIN QUERY PLAN' : 'MySQL EXPLAIN' %></code>)</h3>
+      <div class="table-responsive mb-2" tabindex="0" role="region" aria-label="Query execution plan table">
+        <table class="table table-sm">
+          <thead>
             <tr>
-              <% for (const column of columns) { %>
-                <td><%= row[column] %></td>
+              <% for (const col of explainColumns) { %>
+                <th scope="col"><%= col %></th>
               <% } %>
             </tr>
-          <% } %>
-        </tbody>
-      <% } else { %>
-        <tbody><tr><td class="empty-state">No records returned.</td></tr></tbody>
-      <% } %>
-    </table>
-  </div>
-
-  <details class="advanced-sql-toggle mt-4 pt-3 border-top" <%= explain ? 'open' : '' %>>
-    <summary class="small-note text-muted" style="cursor: pointer; user-select: none;">🛠 Advanced: View SQL query <%= explain ? '& execution analysis' : '' %></summary>
-    <div class="mt-3">
-      <pre class="sql-block"><code><%= report.sql %></code></pre>
-
-      <% if (explain && explainRows.length) { %>
-        <h3 class="mt-3 mb-2 h6">Query execution plan (<code><%= dbFallback ? 'SQLite EXPLAIN QUERY PLAN' : 'MySQL EXPLAIN' %></code>)</h3>
-        <div class="table-responsive mb-2" tabindex="0" role="region" aria-label="Query execution plan table">
-          <table class="table table-sm">
-            <thead>
+          </thead>
+          <tbody>
+            <% for (const er of explainRows) { %>
               <tr>
                 <% for (const col of explainColumns) { %>
-                  <th scope="col"><%= col %></th>
+                  <td><%= er[col] %></td>
                 <% } %>
               </tr>
-            </thead>
-            <tbody>
-              <% for (const er of explainRows) { %>
-                <tr>
-                  <% for (const col of explainColumns) { %>
-                    <td><%= er[col] %></td>
-                  <% } %>
-                </tr>
-              <% } %>
-            </tbody>
-          </table>
-        </div>
-      <% } else { %>
-        <div class="mt-2">
-          <a class="btn btn-sm btn-outline-secondary" href="/reports?query=<%= encodeURIComponent(selected) %>&explain=1">Run execution plan analysis</a>
-        </div>
-      <% } %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
     </div>
-  </details>
+  <% } %>
+
+  <div class="pt-2">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <label class="form-label small-note text-muted mb-0">Query result table:</label>
+      <p class="table-scroll-hint mb-0 small-note">Scroll horizontally if table extends.</p>
+    </div>
+
+    <div class="table-responsive border rounded" tabindex="0" role="region" aria-label="Scrollable data table">
+      <table class="table align-middle mb-0">
+        <caption><%= rows.length %> record(s) returned from database.</caption>
+        <% if (rows.length) { %>
+          <thead class="table-light">
+            <tr>
+              <% for (const column of columns) { %>
+                <th scope="col"><%= column.replaceAll('_', ' ') %></th>
+              <% } %>
+            </tr>
+          </thead>
+          <tbody>
+            <% for (const row of rows) { %>
+              <tr>
+                <% for (const column of columns) { %>
+                  <td><%= row[column] %></td>
+                <% } %>
+              </tr>
+            <% } %>
+          </tbody>
+        <% } else { %>
+          <tbody><tr><td class="empty-state text-center p-4 text-muted">No records found matching query.</td></tr></tbody>
+        <% } %>
+      </table>
+    </div>
+  </div>
 </section>
 <%- include('partials/footer') %>
